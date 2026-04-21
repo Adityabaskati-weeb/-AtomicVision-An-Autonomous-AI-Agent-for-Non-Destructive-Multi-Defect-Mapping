@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from atomicvision.synthetic.types import MaterialCase
 
 
+SCAN_COST_PENALTY_RATE = 0.4
+SCAN_COST_PENALTY_CAP = 4.0
+
+
 @dataclass(frozen=True)
 class RewardBreakdown:
     """Transparent score components for one episode submission."""
@@ -71,7 +75,7 @@ def score_submission(
     confidence_reward = raw_confidence_reward * confidence_scale
     false_positive_penalty = -min(2.0, 0.5 * false_positive_count)
     missed_defect_penalty = -min(2.0, 0.6 * missed_count)
-    scan_cost_penalty = -min(3.0, 0.25 * scan_cost)
+    scan_cost_penalty = scan_cost_penalty_for(scan_cost)
     timeout_penalty = -2.0 if timed_out else 0.0
 
     total = (
@@ -98,6 +102,14 @@ def score_submission(
         f1=round(f1, 6),
         concentration_mae=round(concentration_mae, 6),
     )
+
+
+def scan_cost_penalty_for(scan_cost: float) -> float:
+    """Return the reward penalty for evidence-gathering cost."""
+
+    if scan_cost < 0.0:
+        raise ValueError("scan_cost must be non-negative")
+    return -min(SCAN_COST_PENALTY_CAP, SCAN_COST_PENALTY_RATE * scan_cost)
 
 
 def _merge_predictions(

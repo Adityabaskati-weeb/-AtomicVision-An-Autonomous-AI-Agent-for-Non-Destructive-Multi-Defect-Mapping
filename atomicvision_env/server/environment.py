@@ -13,7 +13,11 @@ from atomicvision.models import (
     predict_case,
     set_reproducible_seed,
 )
-from atomicvision.rewards import RewardBreakdown, score_submission
+from atomicvision.rewards import (
+    RewardBreakdown,
+    scan_cost_penalty_for,
+    score_submission,
+)
 from atomicvision.synthetic import MaterialCase, ScanResult, generate_case, simulate_scan
 from atomicvision_env.models import (
     AtomicVisionAction,
@@ -174,7 +178,7 @@ class AtomicVisionEnvironment(
         self._charge_tool_cost(cost)
         self._reference_visible = True
         self._scan_history.append(ScanRecord(action_type="compare_reference", cost=cost))
-        self._last_reward = -0.25 * cost
+        self._last_reward = scan_cost_penalty_for(cost)
         self._reward_breakdown = {"scan_cost_penalty": round(self._last_reward, 6)}
         self._message = "Pristine reference spectrum is now visible."
 
@@ -183,7 +187,7 @@ class AtomicVisionEnvironment(
         self._charge_tool_cost(cost)
         self._prior_prediction = self._build_prior_prediction()
         self._scan_history.append(ScanRecord(action_type="ask_prior", cost=cost))
-        self._last_reward = -0.25 * cost
+        self._last_reward = scan_cost_penalty_for(cost)
         self._reward_breakdown = {"scan_cost_penalty": round(self._last_reward, 6)}
         self._message = "DefectNet-lite prior returned a candidate defect map."
 
@@ -227,7 +231,7 @@ class AtomicVisionEnvironment(
                 freq_max=scan.freq_max,
             )
         )
-        self._last_reward = -0.25 * scan.cost
+        self._last_reward = scan_cost_penalty_for(scan.cost)
         self._reward_breakdown = {"scan_cost_penalty": round(self._last_reward, 6)}
 
     def _charge_tool_cost(self, cost: float) -> None:

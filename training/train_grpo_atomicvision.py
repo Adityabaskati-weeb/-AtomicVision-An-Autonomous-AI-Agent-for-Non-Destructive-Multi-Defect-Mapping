@@ -39,10 +39,15 @@ DEFAULT_PROMPT = (
     "and high. The frequency axis is synthetic PDoS units from 0.0 to 20.0; valid "
     "zoom examples are 1.0-5.0, 5.0-10.0, and 10.0-18.0. Never use Raman/cm^-1 "
     "values such as 300, 1200, or 3000 for zoom_band. Strong default strategy: "
-    "first call ask_prior, then submit_defect_map using the prior predicted_defects, "
-    "predicted_concentrations, and confidence unless scan evidence gives a better map. "
-    "If requesting extra evidence, prefer one valid high_res_pdos scan or one valid "
-    "zoom band before submitting. submit_defect_map is terminal: after it returns, "
+    "first call ask_prior. If the prior returns predicted_defects with confidence "
+    "0.50 or higher, immediately submit_defect_map using the prior "
+    "predicted_defects, predicted_concentrations, and confidence. "
+    "Extra evidence is expensive: ask_prior costs 1.5, compare_reference costs "
+    "0.5, quick_pdos costs 1.0, standard_pdos costs 2.0, raman_proxy costs 2.5, "
+    "and high_res_pdos or zoom_band costs 4.0. Request another scan only when the "
+    "prior is missing, low-confidence, or you will change the final defect map. "
+    "If requesting extra evidence, use at most one valid scan or one valid zoom "
+    "band before submitting. submit_defect_map is terminal: after it returns, "
     "do not call any more tools. Extra tool calls after final submission are penalized."
 )
 TRAINING_PRESETS: dict[str, dict[str, Any]] = {
@@ -136,6 +141,8 @@ class AtomicVisionToolEnv:
 
         Args:
             scan_mode: Must be exactly one of quick_pdos, standard_pdos, high_res_pdos, or raman_proxy.
+                Costs are quick_pdos=1.0, standard_pdos=2.0, high_res_pdos=4.0, raman_proxy=2.5.
+                Prefer not to call this after ask_prior unless it can improve the submitted map.
             resolution: Must be exactly one of low, medium, or high.
 
         Returns:
@@ -161,6 +168,7 @@ class AtomicVisionToolEnv:
         Args:
             freq_min: Lower frequency bound in synthetic units. Must be within 0.0 to 20.0.
             freq_max: Upper frequency bound in synthetic units. Must be within 0.0 to 20.0 and greater than freq_min.
+                A zoom costs 4.0, so use at most one and only when the prior is weak.
             resolution: Must be exactly one of low, medium, or high.
 
         Returns:
@@ -190,6 +198,7 @@ class AtomicVisionToolEnv:
 
         Returns:
             Candidate defect species, concentrations, confidence, and current budget.
+            If confidence is 0.50 or higher, usually submit this map immediately.
         """
         return self._step(AtomicVisionAction(action_type="ask_prior"))
 
@@ -449,6 +458,9 @@ def _format_observation(observation: dict) -> str:
     prior = observation.get("prior_prediction") or {}
     reward_breakdown = observation.get("reward_breakdown") or {}
     axis = observation.get("frequency_axis") or []
+    scan_history = observation.get("scan_history") or []
+    scan_cost_so_far = _scan_cost_from_history(scan_history)
+    recommended_next_action = _recommended_next_action(prior)
     if axis:
         frequency_range = f"{min(axis):.3f}-{max(axis):.3f}"
     else:
@@ -467,13 +479,38 @@ def _format_observation(observation: dict) -> str:
         f"valid_scan_modes={VALID_SCAN_MODES}\n"
         f"valid_resolutions={VALID_RESOLUTIONS}\n"
         f"valid_frequency_range={frequency_range}\n"
+        f"tool_costs=ask_prior:1.5, compare_reference:0.5, quick_pdos:1.0, "
+        f"standard_pdos:2.0, raman_proxy:2.5, high_res_pdos_or_zoom:4.0\n"
+        f"scan_cost_so_far={scan_cost_so_far:.3f}\n"
+        f"cost_discipline=submit_prior_when_confident; extra_scans_lower_reward\n"
         f"recommended_first_action=ask_prior\n"
+        f"recommended_next_action={recommended_next_action}\n"
         f"candidate_defects={observation.get('candidate_defects')}\n"
         f"prior={prior}\n"
         f"reward={observation.get('reward')} done={observation.get('done')}\n"
         f"reward_breakdown={reward_breakdown}"
         f"{terminal_instruction}"
     )
+
+
+def _recommended_next_action(prior: dict) -> str:
+    defects = prior.get("predicted_defects") or []
+    confidence = float(prior.get("confidence") or 0.0)
+    if defects and confidence >= 0.5:
+        return "submit_defect_map_with_prior"
+    if defects:
+        return "optional_one_scan_then_submit"
+    return "ask_prior"
+
+
+def _scan_cost_from_history(scan_history: list) -> float:
+    total = 0.0
+    for record in scan_history:
+        if isinstance(record, dict):
+            total += float(record.get("cost") or 0.0)
+        else:
+            total += float(getattr(record, "cost", 0.0) or 0.0)
+    return total
 
 
 if __name__ == "__main__":

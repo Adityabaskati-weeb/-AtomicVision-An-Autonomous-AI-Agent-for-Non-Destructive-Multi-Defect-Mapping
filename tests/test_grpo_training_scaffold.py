@@ -28,6 +28,8 @@ def test_prompt_rows_match_grpo_dataset_shape() -> None:
     assert "quick_pdos" in rows["prompt"][0][0]["content"]
     assert "0.0 to 20.0" in rows["prompt"][0][0]["content"]
     assert "ask_prior" in rows["prompt"][0][0]["content"]
+    assert "confidence 0.50 or higher" in rows["prompt"][0][0]["content"]
+    assert "standard_pdos costs 2.0" in rows["prompt"][0][0]["content"]
     assert "submit_defect_map is terminal" in rows["prompt"][0][0]["content"]
     assert rows["seed"] == [0, 1, 2]
     assert rows["difficulty"] == ["hard", "hard", "hard"]
@@ -169,12 +171,18 @@ def test_observation_formatter_includes_training_signal() -> None:
             "done": True,
             "reward_breakdown": {"f1": 0.8},
             "frequency_axis": [0.0, 5.0, 20.0],
+            "scan_history": [
+                {"action_type": "initial_scan", "cost": 0.0},
+                {"action_type": "ask_prior", "cost": 1.5},
+            ],
         }
     )
 
     assert "synthetic-medium-1" in text
     assert "budget_remaining=6.5" in text
     assert "valid_frequency_range=0.000-20.000" in text
+    assert "scan_cost_so_far=1.500" in text
+    assert "recommended_next_action=submit_defect_map_with_prior" in text
     assert "recommended_first_action=ask_prior" in text
     assert "reward=3.0 done=True" in text
     assert "terminal_instruction=stop_tool_calls_return_final_answer" in text

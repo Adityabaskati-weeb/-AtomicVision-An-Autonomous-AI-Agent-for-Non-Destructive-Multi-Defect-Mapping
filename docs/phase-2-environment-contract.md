@@ -112,12 +112,12 @@ Recommended first-pass component ranges:
 | `confidence_reward` | -1 to 1 | Rewards calibrated confidence, penalizes overconfidence. |
 | `false_positive_penalty` | 0 to -2 | Penalizes extra species. |
 | `missed_defect_penalty` | 0 to -2 | Penalizes missing true species. |
-| `scan_cost_penalty` | 0 to -3 | Penalizes expensive evidence gathering. |
+| `scan_cost_penalty` | 0 to -4 | Penalizes expensive evidence gathering. |
 | `timeout_penalty` | 0 or -2 | Penalizes failing to submit. |
 
 Intermediate action rewards:
 
-- Valid information-gathering action: small negative cost only.
+- Valid information-gathering action: negative cost feedback scaled to discourage unnecessary scans.
 - Invalid action: clear negative penalty.
 - Repeated wasteful action: increasing penalty after the first repeat.
 - `ask_prior`: cost penalty, no direct accuracy reward until submit.

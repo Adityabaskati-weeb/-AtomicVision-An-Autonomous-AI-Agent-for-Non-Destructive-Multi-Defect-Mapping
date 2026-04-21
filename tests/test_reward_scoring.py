@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from atomicvision.evaluation import aggregate_rewards
-from atomicvision.rewards import score_submission
+from atomicvision.rewards import scan_cost_penalty_for, score_submission
 from atomicvision.synthetic import generate_case
 
 
@@ -40,6 +40,29 @@ def test_scan_cost_reduces_reward() -> None:
 
     assert expensive.total_reward < cheap.total_reward
     assert expensive.scan_cost_penalty < cheap.scan_cost_penalty
+
+
+def test_scan_cost_penalty_strongly_discourages_extra_standard_scan() -> None:
+    case = generate_case(seed=21, difficulty="medium")
+    defects, concentrations = _truth(case)
+
+    prior_only = score_submission(
+        case,
+        defects,
+        concentrations,
+        confidence=0.95,
+        scan_cost=1.5,
+    )
+    prior_plus_standard_scan = score_submission(
+        case,
+        defects,
+        concentrations,
+        confidence=0.95,
+        scan_cost=3.5,
+    )
+
+    assert prior_only.total_reward - prior_plus_standard_scan.total_reward == pytest.approx(0.8)
+    assert scan_cost_penalty_for(3.5) == pytest.approx(-1.4)
 
 
 def test_missing_defects_are_penalized() -> None:

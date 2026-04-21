@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from atomicvision.models import TrainingConfig, train_defectnet_lite
 from atomicvision_env.client import AtomicVisionEnv
 from atomicvision_env.models import AtomicVisionAction
@@ -42,7 +44,7 @@ def test_request_scan_updates_budget_and_history() -> None:
 
     assert observation.step_count == 1
     assert observation.budget_remaining == 7.0
-    assert observation.last_reward < 0.0
+    assert observation.last_reward == pytest.approx(-0.8)
     assert observation.scan_history[-1].action_type == "request_scan"
 
 
