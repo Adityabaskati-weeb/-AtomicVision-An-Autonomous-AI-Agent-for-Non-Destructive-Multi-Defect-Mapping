@@ -216,9 +216,22 @@ Expected sample mix for 512 medium rows:
 - `submit_after_reference`: about 51 rows
 - `ask_prior`: about 26 rows
 
-Use this dataset for the next assistant-masked SFT LoRA. Keep the first run
-local/no-push. Save checkpoints around steps 40, 60, and 80, then directly
-evaluate each checkpoint before any GRPO continuation.
+This cost-aware run completed on Kaggle. Promote checkpoint 40:
+
+`/kaggle/working/atomicvision-cost-aware-masked-sft-lora/checkpoint-40`
+
+Medium direct rollout result:
+
+- Reward: `4.47530128125`
+- F1: `0.79107153125`
+- MAE: `0.0288233125`
+- Mean steps: `2.0`
+- Mean scan cost: `1.5`
+- Tool failure rate: `0.0`
+- Done rate: `1.0`
+
+This is the current best checkpoint. Do not run GRPO as the default next step;
+use it only as an ablation after the demo artifact is saved.
 
 Generate reference-improvement SFT rows on Kaggle:
 

@@ -186,6 +186,33 @@ This now slightly exceeds the 32-episode `prior_submit` baseline
 (`4.366` reward, `0.773` F1). Full aggregate details are in
 [`sft-copy-lora-results.md`](sft-copy-lora-results.md).
 
+## Kaggle Cost-Aware Assistant-Masked SFT Result
+
+The cost-aware assistant-masked SFT run is now the best promoted checkpoint.
+It used `512` medium-difficulty generated examples:
+
+- `submit_prior`: `435`
+- `submit_after_reference`: `51`
+- `ask_prior`: `26`
+
+Promoted checkpoint:
+
+`/kaggle/working/atomicvision-cost-aware-masked-sft-lora/checkpoint-40`
+
+Medium direct rollout:
+
+- Reward: `4.47530128125`
+- F1: `0.79107153125`
+- MAE: `0.0288233125`
+- Mean steps: `2.0`
+- Mean scan cost: `1.5`
+- Tool failure rate: `0.0`
+- Done rate: `1.0`
+
+This beats both the prior-submit baseline and the previous SFT-copy adapter.
+Full aggregate details are in
+[`cost-aware-masked-sft-results.md`](cost-aware-masked-sft-results.md).
+
 ## GRPO Continuation From SFT-Copy Adapter
 
 The first Kaggle continuation smoke proved that the training path runs and
@@ -291,7 +318,6 @@ python training/generate_atomicvision_sft_data.py \
   --output-jsonl outputs/sft/atomicvision_mixed_copy_reference_sft.jsonl
 ```
 
-Train a fresh assistant-masked SFT LoRA on the cost-aware JSONL before
-attempting more GRPO. The gate stays strict: direct eval must beat the current
-SFT-copy adapter
-(`4.458` terminal reward, `0.790` F1, `0.0321` MAE) before promotion.
+The cost-aware run passed the promotion gate. Do not use GRPO as the default
+next step; keep GRPO as a controlled ablation only. The demo checkpoint is
+`checkpoint-40`.
