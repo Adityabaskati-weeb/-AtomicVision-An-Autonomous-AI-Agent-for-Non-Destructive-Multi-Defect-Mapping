@@ -16,9 +16,31 @@ The oracle ceiling is `7.900`.
 
 ## Training Approach
 
-Use Hugging Face TRL `GRPOTrainer` with `environment_factory`.
+Use a two-stage plan:
 
-Why:
+1. Supervised fine-tuning on exact AtomicVision tool-copy traces.
+2. Hugging Face TRL `GRPOTrainer` with `environment_factory`.
+
+Why SFT first:
+
+- Direct LoRA rollouts learned the low-cost `ask_prior -> submit_defect_map`
+  policy but sometimes changed prior defect species or concentrations.
+- A short SFT stage directly teaches exact JSON/tool argument copying.
+- The resulting adapter is reusable for Kaggle now and HF credit-backed runs later.
+
+Generate the SFT JSONL locally or in Kaggle:
+
+```bash
+python training/generate_atomicvision_sft_data.py \
+  --episodes-per-difficulty 512 \
+  --difficulties easy medium hard \
+  --output-jsonl outputs/sft/atomicvision_tool_copy_sft.jsonl
+```
+
+The generated rows contain chat `messages`, target tool-call metadata, and the
+exact prior copied into `submit_defect_map`.
+
+Why GRPO after SFT:
 
 - TRL's OpenEnv integration supports stateful multi-turn environments.
 - Tool methods are exposed directly to the model.
@@ -27,6 +49,7 @@ Why:
 ## Implemented Scaffold
 
 - `training/train_grpo_atomicvision.py`
+- `training/generate_atomicvision_sft_data.py`
 - `training/requirements-grpo.txt`
 - `AtomicVisionToolEnv`
 - Tools exposed to the model:
@@ -108,9 +131,9 @@ For the larger-parameter path, move next to `Qwen/Qwen3-1.7B`, which is about
 ## Required User Choices Before Long Training
 
 1. Runtime:
-   - Colab free GPU
    - Kaggle GPU
    - RunPod/Lambda paid GPU
+   - Hugging Face Jobs after credits are available
    - local CPU smoke only
 
 2. Model size:
@@ -119,6 +142,7 @@ For the larger-parameter path, move next to `Qwen/Qwen3-1.7B`, which is about
    - Stronger but heavier: larger Qwen/Llama/Gemma-compatible model
 
 3. Training budget:
+   - SFT copy stage: 1k-5k generated rows
    - Smoke: 5-20 GRPO steps
    - Demo: 100-300 GRPO steps
    - Stronger run: 500+ GRPO steps
