@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,9 +30,8 @@ def test_submit_prior_examples_copy_prior_exactly() -> None:
 
 
 def test_sft_generator_cli_writes_jsonl() -> None:
-    output_path = Path("outputs/test-sft-generator/atomicvision_sft.jsonl")
+    output_path = Path(f"outputs/test-sft-generator/atomicvision_sft_{os.getpid()}.jsonl")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.unlink(missing_ok=True)
 
     completed = subprocess.run(
         [

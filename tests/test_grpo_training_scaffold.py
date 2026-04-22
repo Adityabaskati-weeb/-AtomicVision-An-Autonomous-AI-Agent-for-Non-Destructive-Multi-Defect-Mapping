@@ -13,6 +13,7 @@ from training.train_grpo_atomicvision import (
     _env_url,
     _format_observation,
     _is_retryable_connection_error,
+    build_arg_parser,
     build_dataset,
     build_prompt_rows,
     reward_func,
@@ -81,6 +82,25 @@ def test_apply_preset_preserves_explicit_run_name() -> None:
 
     assert args.model == "Qwen/Qwen3-1.7B"
     assert args.run_name == "custom"
+
+
+def test_cli_accepts_adapter_continuation_args() -> None:
+    parser = build_arg_parser()
+
+    args = parser.parse_args(
+        [
+            "--model",
+            "Qwen/Qwen3-1.7B",
+            "--adapter-model-id",
+            "prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora",
+            "--max-steps",
+            "10",
+        ]
+    )
+
+    assert args.model == "Qwen/Qwen3-1.7B"
+    assert args.adapter_model_id == "prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora"
+    assert args.max_steps == 10
 
 
 def test_tool_env_is_lazy_and_requires_reset_before_tools() -> None:

@@ -341,7 +341,9 @@ def build_dataset(samples: int, difficulty: str = "medium"):
     return Dataset.from_dict(build_prompt_rows(samples=samples, difficulty=difficulty))
 
 
-def main() -> None:
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the GRPO training CLI parser."""
+
     parser = argparse.ArgumentParser(description="Fine-tune an AtomicVision agent with TRL GRPO.")
     parser.add_argument("--preset", choices=sorted(TRAINING_PRESETS), default=None)
     parser.add_argument("--model", default=DEFAULT_MODEL)
@@ -358,12 +360,24 @@ def main() -> None:
     parser.add_argument("--report-to", default="trackio")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--use-peft", action="store_true")
+    parser.add_argument(
+        "--adapter-model-id",
+        default=None,
+        help=(
+            "Optional PEFT adapter repo or local path to continue training from. "
+            "When set, --model is treated as the base model and --use-peft is ignored."
+        ),
+    )
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--push-to-hub", action="store_true")
     parser.add_argument("--hub-model-id", default=None)
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    args = build_arg_parser().parse_args()
 
     _apply_preset(args)
     if args.run_name is None:
@@ -387,8 +401,24 @@ def main() -> None:
 
     from trl import GRPOConfig, GRPOTrainer
 
+    model = args.model
     peft_config = None
-    if args.use_peft:
+    if args.adapter_model_id:
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM
+
+        base_model = AutoModelForCausalLM.from_pretrained(
+            args.model,
+            torch_dtype="auto",
+            device_map="auto",
+            trust_remote_code=True,
+        )
+        model = PeftModel.from_pretrained(
+            base_model,
+            args.adapter_model_id,
+            is_trainable=True,
+        )
+    elif args.use_peft:
         from peft import LoraConfig
 
         peft_config = LoraConfig(
@@ -402,7 +432,7 @@ def main() -> None:
 
     dataset = build_dataset(samples=args.samples, difficulty=args.difficulty)
     trainer = GRPOTrainer(
-        model=args.model,
+        model=model,
         train_dataset=dataset,
         reward_funcs=reward_func,
         args=GRPOConfig(

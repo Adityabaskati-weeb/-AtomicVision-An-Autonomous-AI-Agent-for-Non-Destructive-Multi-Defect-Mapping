@@ -181,3 +181,24 @@ Result:
 This now slightly exceeds the 32-episode `prior_submit` baseline
 (`4.366` reward, `0.773` F1). Full aggregate details are in
 [`sft-copy-lora-results.md`](sft-copy-lora-results.md).
+
+## GRPO Continuation From SFT-Copy Adapter
+
+The next training run should initialize from the SFT-copy adapter rather than a
+fresh LoRA:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --model Qwen/Qwen3-1.7B \
+  --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora \
+  --samples 128 \
+  --max-steps 50 \
+  --num-generations 2 \
+  --per-device-train-batch-size 2 \
+  --gradient-accumulation-steps 1 \
+  --max-completion-length 768 \
+  --learning-rate 5e-6
+```
+
+The continuation target is to preserve exact tool-copy reliability while
+learning when a weak prior deserves one extra scan.
