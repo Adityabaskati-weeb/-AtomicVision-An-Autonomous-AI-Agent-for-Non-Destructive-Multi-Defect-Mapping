@@ -38,8 +38,9 @@ previous gate has been validated.
 - Phase 11: GRPO Fine-Tuning Scaffold
 - Phase 12: SFT Copy LoRA Rollout
 - Phase 13: Format-Aware GRPO Continuation
-- Status: Phase 13 scaffold ready; SFT-copy adapter remains the best checkpoint;
-  curated reference-improvement SFT bridge added for the next run
+- Status: Phase 13 scaffold ready; SFT-copy adapter remains the best promoted
+  checkpoint; cost-aware assistant-masked SFT data generation added for the
+  next run
 - Scope document: [docs/phase-0-scope-lock.md](docs/phase-0-scope-lock.md)
 - System design: [docs/phase-1-system-design.md](docs/phase-1-system-design.md)
 - Environment contract: [docs/phase-2-environment-contract.md](docs/phase-2-environment-contract.md)
@@ -84,5 +85,7 @@ but logged `reward_std=0`, `frac_reward_zero_std=1`, `loss=0`, and
 The GRPO scaffold now keeps the tool-system prompt by default, exposes sampling
 knobs, weakens exact-copy shaping, and adds a variance-probe preset before the
 next promotion attempt. The latest code also exposes compact spectral summaries
-to the model and can generate curated `submit_after_reference` SFT examples, so
-the next run can learn useful one-reference behavior before another GRPO smoke.
+to the model and can generate a cost-aware assistant-masked SFT dataset: mostly
+cheap prior-submit traces, with only a small curated slice of one-reference
+traces. The next run should reduce scan/reference overuse before another GRPO
+smoke.

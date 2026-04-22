@@ -38,6 +38,8 @@ COMPARE_REFERENCE_CALL = {"name": "compare_reference", "arguments": {}}
 BASE_SAMPLE_TYPES = {"ask_prior", "submit_prior"}
 SCAN_SAMPLE_TYPE = "submit_after_reference"
 SAMPLE_TYPES = BASE_SAMPLE_TYPES | {SCAN_SAMPLE_TYPE}
+COST_AWARE_SUBMIT_PRIOR_RATIO = 0.85
+COST_AWARE_REFERENCE_RATIO = 0.10
 
 
 def build_sft_examples(
@@ -72,6 +74,69 @@ def build_sft_examples(
             examples.extend(
                 build_scan_improvement_examples(
                     target_examples=episodes_per_difficulty,
+                    difficulty=difficulty,
+                    seed_start=seed_start,
+                    min_scan_improvement=min_scan_improvement,
+                    max_candidate_seeds=max_scan_candidates_per_difficulty,
+                )
+            )
+    return examples
+
+
+def build_cost_aware_sft_examples(
+    examples_per_difficulty: int,
+    difficulties: tuple[str, ...] = ("medium",),
+    seed_start: int = 0,
+    submit_prior_ratio: float = COST_AWARE_SUBMIT_PRIOR_RATIO,
+    reference_ratio: float = COST_AWARE_REFERENCE_RATIO,
+    min_scan_improvement: float = 0.25,
+    max_scan_candidates_per_difficulty: int | None = None,
+) -> list[dict[str, Any]]:
+    """Build a cheap-prior-biased SFT set for cost-aware tool use.
+
+    The resulting mix is mostly ask_prior -> submit_defect_map rows, with a
+    small number of curated compare_reference rows and first-call ask_prior
+    format rows. This intentionally avoids teaching the model that expensive
+    tools should be used by default.
+    """
+
+    if examples_per_difficulty <= 0:
+        raise ValueError("examples_per_difficulty must be positive")
+    if not 0.0 <= submit_prior_ratio <= 1.0:
+        raise ValueError("submit_prior_ratio must be between 0 and 1")
+    if not 0.0 <= reference_ratio <= 1.0:
+        raise ValueError("reference_ratio must be between 0 and 1")
+    if submit_prior_ratio + reference_ratio > 1.0:
+        raise ValueError("submit_prior_ratio + reference_ratio must be <= 1")
+
+    examples: list[dict[str, Any]] = []
+    for difficulty in difficulties:
+        submit_count = int(round(examples_per_difficulty * submit_prior_ratio))
+        reference_count = int(round(examples_per_difficulty * reference_ratio))
+        if submit_count + reference_count > examples_per_difficulty:
+            reference_count = max(0, examples_per_difficulty - submit_count)
+        ask_count = examples_per_difficulty - submit_count - reference_count
+
+        for seed in range(seed_start, seed_start + submit_count):
+            examples.extend(
+                build_episode_examples(
+                    seed=seed,
+                    difficulty=difficulty,
+                    sample_types=("submit_prior",),
+                )
+            )
+        for seed in range(seed_start + submit_count, seed_start + submit_count + ask_count):
+            examples.extend(
+                build_episode_examples(
+                    seed=seed,
+                    difficulty=difficulty,
+                    sample_types=("ask_prior",),
+                )
+            )
+        if reference_count:
+            examples.extend(
+                build_scan_improvement_examples(
+                    target_examples=reference_count,
                     difficulty=difficulty,
                     seed_start=seed_start,
                     min_scan_improvement=min_scan_improvement,
@@ -310,6 +375,15 @@ def main() -> None:
         description="Generate AtomicVision SFT JSONL for exact prior-to-tool-call copying.",
     )
     parser.add_argument("--episodes-per-difficulty", type=int, default=256)
+    parser.add_argument(
+        "--profile",
+        choices=("explicit", "cost_aware"),
+        default="explicit",
+        help=(
+            "explicit uses --sample-types as-is. cost_aware creates a "
+            "cheap-prior-biased mix for assistant-masked SFT."
+        ),
+    )
     parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--difficulties", nargs="+", default=["medium"])
     parser.add_argument(
@@ -331,19 +405,42 @@ def main() -> None:
         help="Maximum seeds to search when collecting scan-improvement examples.",
     )
     parser.add_argument(
+        "--submit-prior-ratio",
+        type=float,
+        default=COST_AWARE_SUBMIT_PRIOR_RATIO,
+        help="Cost-aware profile ratio for ask_prior -> submit_defect_map rows.",
+    )
+    parser.add_argument(
+        "--reference-ratio",
+        type=float,
+        default=COST_AWARE_REFERENCE_RATIO,
+        help="Cost-aware profile ratio for ask_prior -> compare_reference -> submit rows.",
+    )
+    parser.add_argument(
         "--output-jsonl",
         default="outputs/sft/atomicvision_tool_copy_sft.jsonl",
     )
     args = parser.parse_args()
 
-    examples = build_sft_examples(
-        episodes_per_difficulty=args.episodes_per_difficulty,
-        difficulties=tuple(args.difficulties),
-        seed_start=args.seed_start,
-        sample_types=tuple(args.sample_types),
-        min_scan_improvement=args.min_scan_improvement,
-        max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
-    )
+    if args.profile == "cost_aware":
+        examples = build_cost_aware_sft_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            submit_prior_ratio=args.submit_prior_ratio,
+            reference_ratio=args.reference_ratio,
+            min_scan_improvement=args.min_scan_improvement,
+            max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+        )
+    else:
+        examples = build_sft_examples(
+            episodes_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            sample_types=tuple(args.sample_types),
+            min_scan_improvement=args.min_scan_improvement,
+            max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+        )
     output_path = write_jsonl(examples, args.output_jsonl)
     counts = Counter(example["sample_type"] for example in examples)
     print(f"Wrote {len(examples)} examples to {output_path}")

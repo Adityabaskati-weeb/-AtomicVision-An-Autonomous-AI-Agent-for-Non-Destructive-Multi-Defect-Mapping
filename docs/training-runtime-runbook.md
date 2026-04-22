@@ -192,6 +192,34 @@ wrapper now exposes compact spectral summaries:
 - `spectrum_delta_top_abs` after `compare_reference`
 - `candidate_signature_scores` after `compare_reference`
 
+The first mixed reference-heavy SFT run fixed much of the tool-call collapse,
+but it over-used extra evidence tools. The next dataset should therefore be
+cost-aware: mostly cheap `ask_prior -> submit_defect_map` rows, with only a
+small number of curated `compare_reference` rows.
+
+Recommended Kaggle data generation command:
+
+```bash
+python training/generate_atomicvision_sft_data.py \
+  --profile cost_aware \
+  --episodes-per-difficulty 512 \
+  --difficulties medium \
+  --submit-prior-ratio 0.85 \
+  --reference-ratio 0.10 \
+  --min-scan-improvement 0.25 \
+  --output-jsonl outputs/sft/atomicvision_cost_aware_masked_sft.jsonl
+```
+
+Expected sample mix for 512 medium rows:
+
+- `submit_prior`: about 435 rows
+- `submit_after_reference`: about 51 rows
+- `ask_prior`: about 26 rows
+
+Use this dataset for the next assistant-masked SFT LoRA. Keep the first run
+local/no-push. Save checkpoints around steps 40, 60, and 80, then directly
+evaluate each checkpoint before any GRPO continuation.
+
 Generate reference-improvement SFT rows on Kaggle:
 
 ```bash
@@ -203,8 +231,8 @@ python training/generate_atomicvision_sft_data.py \
   --output-jsonl outputs/sft/atomicvision_reference_improvement_sft.jsonl
 ```
 
-For a mixed refresher dataset that keeps exact prior-copy behavior while adding
-one-reference examples:
+For a reference-heavy ablation dataset that keeps exact prior-copy behavior
+while adding many one-reference examples:
 
 ```bash
 python training/generate_atomicvision_sft_data.py \
@@ -215,9 +243,10 @@ python training/generate_atomicvision_sft_data.py \
   --output-jsonl outputs/sft/atomicvision_mixed_copy_reference_sft.jsonl
 ```
 
-Use the mixed dataset for the next SFT LoRA. Keep the first run local/no-push.
-Only after direct eval beats the current SFT-copy adapter should you run another
-variance-aware GRPO continuation.
+Do not use this reference-heavy mix as the default next run; it is useful only
+as an ablation if the cost-aware profile fails to improve. Only after direct
+eval beats the current SFT-copy adapter should you run another variance-aware
+GRPO continuation.
 
 ## Hugging Face Training
 

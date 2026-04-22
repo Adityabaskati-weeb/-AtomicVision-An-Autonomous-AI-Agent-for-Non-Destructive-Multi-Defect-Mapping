@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from training.generate_atomicvision_sft_data import build_sft_examples
+from training.generate_atomicvision_sft_data import build_cost_aware_sft_examples, build_sft_examples
 
 
 def test_submit_prior_examples_copy_prior_exactly() -> None:
@@ -86,6 +86,42 @@ def test_scan_improvement_examples_use_reference_before_revised_submit() -> None
         assert example["oracle_defect_map"] == assistant_calls[-1]["arguments"]
 
 
+def test_cost_aware_examples_use_cheap_prior_biased_mix() -> None:
+    examples = build_cost_aware_sft_examples(
+        examples_per_difficulty=20,
+        difficulties=("medium",),
+        max_scan_candidates_per_difficulty=24,
+    )
+
+    counts = _counts_by_type(examples)
+
+    assert len(examples) == 20
+    assert counts == {
+        "ask_prior": 1,
+        "submit_after_reference": 2,
+        "submit_prior": 17,
+    }
+    for example in examples:
+        assistant_calls = [
+            _parse_tool_call(message["content"])
+            for message in example["messages"]
+            if message["role"] == "assistant"
+        ]
+        if example["sample_type"] == "submit_prior":
+            assert [call["name"] for call in assistant_calls] == [
+                "ask_prior",
+                "submit_defect_map",
+            ]
+        elif example["sample_type"] == "submit_after_reference":
+            assert [call["name"] for call in assistant_calls] == [
+                "ask_prior",
+                "compare_reference",
+                "submit_defect_map",
+            ]
+        else:
+            assert [call["name"] for call in assistant_calls] == ["ask_prior"]
+
+
 def test_sft_generator_cli_writes_scan_improvement_jsonl() -> None:
     output_path = Path(f"outputs/test-sft-generator/atomicvision_scan_sft_{os.getpid()}.jsonl")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,8 +151,49 @@ def test_sft_generator_cli_writes_scan_improvement_jsonl() -> None:
     assert {row["sample_type"] for row in rows} == {"submit_after_reference"}
 
 
+def test_sft_generator_cli_writes_cost_aware_jsonl() -> None:
+    output_path = Path(f"outputs/test-sft-generator/atomicvision_cost_sft_{os.getpid()}.jsonl")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "training/generate_atomicvision_sft_data.py",
+            "--profile",
+            "cost_aware",
+            "--episodes-per-difficulty",
+            "20",
+            "--difficulties",
+            "medium",
+            "--max-scan-candidates-per-difficulty",
+            "24",
+            "--output-jsonl",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+    assert "Wrote 20 examples" in completed.stdout
+    assert _counts_by_type(rows) == {
+        "ask_prior": 1,
+        "submit_after_reference": 2,
+        "submit_prior": 17,
+    }
+
+
 def _parse_tool_call(text: str) -> dict:
     assert text.startswith("<tool_call>")
     assert text.endswith("</tool_call>")
     payload = text.removeprefix("<tool_call>").removesuffix("</tool_call>")
     return json.loads(payload)
+
+
+def _counts_by_type(rows: list[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["sample_type"]] = counts.get(row["sample_type"], 0) + 1
+    return dict(sorted(counts.items()))

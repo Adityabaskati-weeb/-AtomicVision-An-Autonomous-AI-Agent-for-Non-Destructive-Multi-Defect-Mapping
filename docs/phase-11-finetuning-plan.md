@@ -250,7 +250,37 @@ actual spectrum or reference deltas. Extra scans were valid but mostly
 unusable. The formatter now emits compact spectral summaries and the SFT
 generator can create curated `submit_after_reference` examples.
 
-Generate the bridge dataset:
+The first assistant-masked mixed SFT run improved tool-call reliability, but it
+over-used expensive tools:
+
+- Reward: `3.83183534375`
+- F1: `0.722023875`
+- MAE: `0.03924984375`
+- Mean steps: `3.0`
+- Mean scan cost: `2.0`
+- Tool failure rate: `0.09375`
+
+The next bridge should be cost-aware rather than reference-heavy. Generate the
+recommended dataset:
+
+```bash
+python training/generate_atomicvision_sft_data.py \
+  --profile cost_aware \
+  --episodes-per-difficulty 512 \
+  --difficulties medium \
+  --submit-prior-ratio 0.85 \
+  --reference-ratio 0.10 \
+  --min-scan-improvement 0.25 \
+  --output-jsonl outputs/sft/atomicvision_cost_aware_masked_sft.jsonl
+```
+
+Expected 512-row mix:
+
+- `submit_prior`: about 435
+- `submit_after_reference`: about 51
+- `ask_prior`: about 26
+
+The older reference-heavy ablation command is:
 
 ```bash
 python training/generate_atomicvision_sft_data.py \
@@ -261,6 +291,7 @@ python training/generate_atomicvision_sft_data.py \
   --output-jsonl outputs/sft/atomicvision_mixed_copy_reference_sft.jsonl
 ```
 
-Train a fresh SFT LoRA on that mixed JSONL before attempting more GRPO. The
-gate stays strict: direct eval must beat the current SFT-copy adapter
+Train a fresh assistant-masked SFT LoRA on the cost-aware JSONL before
+attempting more GRPO. The gate stays strict: direct eval must beat the current
+SFT-copy adapter
 (`4.458` terminal reward, `0.790` F1, `0.0321` MAE) before promotion.
