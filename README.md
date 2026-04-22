@@ -36,7 +36,8 @@ previous gate has been validated.
 - Phase 9: Hugging Face Space Deployment
 - Phase 10: Reward Comparison And Colab Bridge
 - Phase 11: GRPO Fine-Tuning Scaffold
-- Status: Phase 11 in progress; smoke training pending runtime choice
+- Phase 12: SFT Copy LoRA Rollout
+- Status: Phase 12 complete; next step is GRPO continuation from the SFT-copy adapter
 - Scope document: [docs/phase-0-scope-lock.md](docs/phase-0-scope-lock.md)
 - System design: [docs/phase-1-system-design.md](docs/phase-1-system-design.md)
 - Environment contract: [docs/phase-2-environment-contract.md](docs/phase-2-environment-contract.md)
@@ -51,4 +52,22 @@ previous gate has been validated.
 - Phase 11 notes: [docs/phase-11-finetuning-plan.md](docs/phase-11-finetuning-plan.md)
 - Training runbook: [docs/training-runtime-runbook.md](docs/training-runtime-runbook.md)
 - Reward comparison: [docs/reward-comparison-report.md](docs/reward-comparison-report.md)
+- SFT-copy rollout result: [docs/sft-copy-lora-results.md](docs/sft-copy-lora-results.md)
 - Colab bridge: [notebooks/AtomicVision_GRPO_Colab.ipynb](notebooks/AtomicVision_GRPO_Colab.ipynb)
+
+## Latest Result
+
+Kaggle SFT-copy training produced a Qwen3-1.7B LoRA adapter that fixes the
+main direct-rollout weakness from the GRPO-only run: exact copying of
+DefectNet-lite prior tool outputs into the terminal `submit_defect_map` call.
+
+Model: [`prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora`](https://huggingface.co/prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora)
+
+| Evaluation | Episodes | Reward | F1 | MAE | Steps | Scan cost | Tool failures | Done rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| GRPO-only direct rollout | 32 | 2.625 | 0.599 | 0.0783 | 2.03 | 1.55 | 0.00 | 1.00 |
+| SFT-copy direct rollout | 32 | 4.458 | 0.790 | 0.0321 | 2.06 | 1.55 | 0.00 | 1.00 |
+| Prior-submit baseline | 32 | 4.366 | 0.773 | 0.0318 | 2.00 | 1.50 | 0.00 | 1.00 |
+
+The SFT-copy adapter slightly outperforms the deterministic prior-submit
+baseline while preserving 0% malformed tool calls and 100% episode completion.

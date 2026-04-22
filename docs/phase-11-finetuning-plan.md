@@ -164,3 +164,20 @@ Phase 11 is complete only when:
 - A short training run produces reward logs.
 - Reward curve compares against `prior_submit`.
 - The result is documented for judges.
+
+## Kaggle SFT-Copy Result
+
+The direct GRPO-only LoRA rollout revealed a copy-accuracy bottleneck, so a
+Kaggle SFT-copy stage was run on generated AtomicVision tool-copy traces.
+
+Result:
+
+- Model: `prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora`
+- Training loss: `0.370648` after `120` SFT steps
+- Medium direct rollout: reward `4.458`, F1 `0.790`, scan cost `1.55`
+- Tool failure rate: `0%`
+- Done rate: `100%`
+
+This now slightly exceeds the 32-episode `prior_submit` baseline
+(`4.366` reward, `0.773` F1). Full aggregate details are in
+[`sft-copy-lora-results.md`](sft-copy-lora-results.md).

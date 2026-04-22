@@ -39,3 +39,12 @@ Episodes per policy/difficulty: `6`
 - `scan_heavy` shows extra scans are useful only when they improve final accuracy enough to justify cost.
 - `prior_submit` is the strongest non-training baseline for Phase 11.
 - `oracle` is an upper-bound sanity check, not a deployable agent.
+
+## Trained Model Rollout Update
+
+After baseline comparison, the Kaggle SFT-copy LoRA
+`prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora` was evaluated through direct
+tool-call rollouts on 32 medium-difficulty episodes. It reached `4.458` mean
+reward and `0.790` F1 with `0%` tool-call failures and `100%` completion,
+slightly exceeding the 32-episode `prior_submit` baseline (`4.366` reward,
+`0.773` F1). See [`sft-copy-lora-results.md`](sft-copy-lora-results.md).

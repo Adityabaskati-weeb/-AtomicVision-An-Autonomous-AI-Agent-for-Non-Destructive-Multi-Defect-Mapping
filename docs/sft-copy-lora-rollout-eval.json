@@ -1,0 +1,64 @@
+{
+  "model_id": "prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora",
+  "base_model": "Qwen/Qwen3-1.7B",
+  "training": {
+    "method": "Unsloth SFT LoRA",
+    "dataset_examples": 3072,
+    "max_steps": 120,
+    "train_loss": 0.37064789111415547,
+    "train_runtime_seconds": 1009.246,
+    "train_samples_per_second": 0.951,
+    "train_steps_per_second": 0.119,
+    "trainable_parameters": 17432576,
+    "total_parameters": 1738007552,
+    "trainable_parameter_fraction": 0.01003
+  },
+  "rollout_eval": {
+    "difficulty": "medium",
+    "episodes": 32,
+    "mean_reward": 4.45786596875,
+    "mean_f1": 0.7898810625,
+    "mean_mae": 0.03206403125,
+    "mean_steps": 2.0625,
+    "mean_scan_cost": 1.546875,
+    "tool_failure_rate": 0.0,
+    "done_rate": 1.0
+  },
+  "comparisons": {
+    "grpo_only_direct_rollout": {
+      "episodes": 32,
+      "mean_reward": 2.62466103125,
+      "mean_f1": 0.59895853125,
+      "mean_mae": 0.0783485,
+      "mean_steps": 2.03125,
+      "mean_scan_cost": 1.546875,
+      "tool_failure_rate": 0.0,
+      "done_rate": 1.0
+    },
+    "prior_submit_baseline": {
+      "episodes": 32,
+      "mean_reward": 4.366426,
+      "mean_f1": 0.773214,
+      "mean_mae": 0.031791,
+      "mean_steps": 2.0,
+      "mean_scan_cost": 1.5,
+      "tool_failure_rate": 0.0,
+      "done_rate": 1.0
+    },
+    "oracle_upper_bound": {
+      "episodes": 32,
+      "mean_reward": 7.9,
+      "mean_f1": 1.0,
+      "mean_mae": 0.0,
+      "mean_steps": 1.0,
+      "mean_scan_cost": 0.0,
+      "tool_failure_rate": 0.0,
+      "done_rate": 1.0
+    }
+  },
+  "notes": [
+    "Aggregate metrics were produced in Kaggle direct rollout evaluation.",
+    "The full per-episode artifact was saved in Kaggle as /kaggle/working/sft_copy_lora_rollout_eval.json.",
+    "The repository copy stores aggregate metrics for documentation and judging."
+  ]
+}
