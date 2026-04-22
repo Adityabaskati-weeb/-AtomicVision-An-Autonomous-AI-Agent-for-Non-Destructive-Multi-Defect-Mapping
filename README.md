@@ -77,5 +77,9 @@ baseline while preserving 0% malformed tool calls and 100% episode completion.
 The first 20-step GRPO continuation from this adapter completed successfully on
 Kaggle, but it was not promoted: with the required tool-system prompt it matched
 the prior-submit baseline (`4.366` reward, `0.773` F1) and remained below the
-SFT-copy adapter. The GRPO scaffold now includes the tool-system prompt by
-default and adds format/copy reward shaping for the next run.
+SFT-copy adapter. A follow-up format-aware smoke also produced valid tool calls
+but logged `reward_std=0`, `frac_reward_zero_std=1`, `loss=0`, and
+`grad_norm=0`, confirming that grouped rollouts had no relative reward signal.
+The GRPO scaffold now keeps the tool-system prompt by default, exposes sampling
+knobs, weakens exact-copy shaping, and adds a variance-probe preset before the
+next promotion attempt.

@@ -29,17 +29,20 @@ DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
 POST_TERMINAL_TOOL_PENALTY = 2.0
 VALID_TOOL_CALL_FORMAT_REWARD = 0.15
 INVALID_TOOL_CALL_FORMAT_PENALTY = 0.75
-EXACT_PRIOR_COPY_REWARD = 0.25
-CONFIDENT_PRIOR_MIS_COPY_PENALTY = 0.6
+EXACT_PRIOR_COPY_REWARD = 0.05
+CONFIDENT_PRIOR_MIS_COPY_PENALTY = 0.25
+CONFIDENT_PRIOR_COPY_THRESHOLD = 0.65
+PRIOR_SUBMIT_THRESHOLD = 0.50
 ScanMode = Literal["quick_pdos", "standard_pdos", "high_res_pdos", "raman_proxy"]
 Resolution = Literal["low", "medium", "high"]
 VALID_SCAN_MODES = ("quick_pdos", "standard_pdos", "high_res_pdos", "raman_proxy")
 VALID_RESOLUTIONS = ("low", "medium", "high")
 TOOL_SYSTEM_PROMPT = (
     "You are using AtomicVision tools. Return exactly one tool call wrapped in "
-    "<tool_call>...</tool_call>. Use ask_prior first. After the prior appears, "
-    "copy its predicted_defects, predicted_concentrations, and confidence "
-    "exactly into submit_defect_map. Do not invent species or concentrations."
+    "<tool_call>...</tool_call>. Use ask_prior first. After the prior appears, copy "
+    "high-confidence priors into submit_defect_map. For borderline priors, one cheap "
+    "valid scan or compare_reference call is allowed if it can improve the final map. "
+    "Do not invent unsupported tool names, species, or concentration formats."
 )
 DEFAULT_PROMPT = (
     "You are AtomicVision, an autonomous materials characterization agent. "
@@ -52,8 +55,10 @@ DEFAULT_PROMPT = (
     "zoom examples are 1.0-5.0, 5.0-10.0, and 10.0-18.0. Never use Raman/cm^-1 "
     "values such as 300, 1200, or 3000 for zoom_band. Strong default strategy: "
     "first call ask_prior. If the prior returns predicted_defects with confidence "
-    "0.50 or higher, immediately submit_defect_map using the prior "
-    "predicted_defects, predicted_concentrations, and confidence. "
+    "0.65 or higher, usually submit_defect_map using the prior predicted_defects, "
+    "predicted_concentrations, and confidence. If confidence is 0.50-0.65, either "
+    "submit the prior or request one cheap extra signal only if it can improve the "
+    "final map. "
     "Extra evidence is expensive: ask_prior costs 1.5, compare_reference costs "
     "0.5, quick_pdos costs 1.0, standard_pdos costs 2.0, raman_proxy costs 2.5, "
     "and high_res_pdos or zoom_band costs 4.0. Request another scan only when the "
@@ -67,23 +72,45 @@ TRAINING_PRESETS: dict[str, dict[str, Any]] = {
         "model": "Qwen/Qwen3-0.6B",
         "samples": 32,
         "max_steps": 5,
-        "num_generations": 2,
-        "per_device_train_batch_size": 2,
-        "gradient_accumulation_steps": 1,
+        "num_generations": 4,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 4,
         "max_completion_length": 1024,
+        "temperature": 1.2,
+        "top_p": 0.95,
+        "top_k": 50,
         "use_peft": True,
         "lora_r": 16,
         "lora_alpha": 32,
         "run_name": "atomicvision-grpo-smoke",
     },
+    "variance-probe": {
+        "model": "Qwen/Qwen3-1.7B",
+        "samples": 32,
+        "max_steps": 3,
+        "num_generations": 8,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 8,
+        "max_completion_length": 768,
+        "temperature": 1.25,
+        "top_p": 0.95,
+        "top_k": 50,
+        "use_peft": True,
+        "lora_r": 16,
+        "lora_alpha": 32,
+        "run_name": "atomicvision-grpo-variance-probe",
+    },
     "colab-20": {
         "model": "Qwen/Qwen3-0.6B",
         "samples": 64,
         "max_steps": 20,
-        "num_generations": 2,
-        "per_device_train_batch_size": 2,
-        "gradient_accumulation_steps": 1,
+        "num_generations": 4,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 4,
         "max_completion_length": 1024,
+        "temperature": 1.2,
+        "top_p": 0.95,
+        "top_k": 50,
         "use_peft": True,
         "lora_r": 16,
         "lora_alpha": 32,
@@ -93,10 +120,13 @@ TRAINING_PRESETS: dict[str, dict[str, Any]] = {
         "model": "Qwen/Qwen3-1.7B",
         "samples": 128,
         "max_steps": 50,
-        "num_generations": 2,
-        "per_device_train_batch_size": 2,
-        "gradient_accumulation_steps": 1,
+        "num_generations": 8,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 8,
         "max_completion_length": 768,
+        "temperature": 1.2,
+        "top_p": 0.95,
+        "top_k": 50,
         "use_peft": True,
         "lora_r": 16,
         "lora_alpha": 32,
@@ -106,10 +136,13 @@ TRAINING_PRESETS: dict[str, dict[str, Any]] = {
         "model": "Qwen/Qwen3-4B",
         "samples": 256,
         "max_steps": 100,
-        "num_generations": 4,
-        "per_device_train_batch_size": 4,
-        "gradient_accumulation_steps": 1,
+        "num_generations": 8,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 8,
         "max_completion_length": 768,
+        "temperature": 1.2,
+        "top_p": 0.95,
+        "top_k": 50,
         "use_peft": True,
         "lora_r": 16,
         "lora_alpha": 32,
@@ -399,11 +432,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--samples", type=int, default=32)
     parser.add_argument("--output-dir", default="outputs/grpo-atomicvision")
     parser.add_argument("--max-steps", type=int, default=5)
-    parser.add_argument("--num-generations", type=int, default=2)
-    parser.add_argument("--per-device-train-batch-size", type=int, default=2)
-    parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument("--num-generations", type=int, default=8)
+    parser.add_argument("--per-device-train-batch-size", type=int, default=1)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1.0e-5)
     parser.add_argument("--max-completion-length", type=int, default=1024)
+    parser.add_argument("--temperature", type=float, default=1.2)
+    parser.add_argument("--top-p", type=float, default=0.95)
+    parser.add_argument("--top-k", type=int, default=50)
+    parser.add_argument("--min-p", type=float, default=None)
+    parser.add_argument(
+        "--scale-rewards",
+        choices=["group", "batch", "none"],
+        default="group",
+        help="Reward scaling strategy passed to TRL GRPOConfig.",
+    )
+    parser.add_argument("--beta", type=float, default=0.0)
+    parser.add_argument(
+        "--loss-type",
+        choices=["grpo", "dapo", "dr_grpo", "bnpo"],
+        default="dapo",
+    )
     parser.add_argument("--report-to", default="trackio")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--use-peft", action="store_true")
@@ -501,6 +550,13 @@ def main() -> None:
             learning_rate=args.learning_rate,
             max_completion_length=args.max_completion_length,
             num_generations=args.num_generations,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            top_k=args.top_k,
+            min_p=args.min_p,
+            scale_rewards=args.scale_rewards,
+            beta=args.beta,
+            loss_type=args.loss_type,
             per_device_train_batch_size=args.per_device_train_batch_size,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             max_steps=args.max_steps,
@@ -603,7 +659,7 @@ def _prior_copy_reward(env: AtomicVisionToolEnv) -> float:
     )
     if is_exact:
         return EXACT_PRIOR_COPY_REWARD
-    if confidence >= 0.5:
+    if confidence >= CONFIDENT_PRIOR_COPY_THRESHOLD:
         return -CONFIDENT_PRIOR_MIS_COPY_PENALTY
     return 0.0
 
@@ -640,7 +696,7 @@ def _format_observation(observation: dict) -> str:
         f"tool_costs=ask_prior:1.5, compare_reference:0.5, quick_pdos:1.0, "
         f"standard_pdos:2.0, raman_proxy:2.5, high_res_pdos_or_zoom:4.0\n"
         f"scan_cost_so_far={scan_cost_so_far:.3f}\n"
-        f"cost_discipline=submit_prior_when_confident; extra_scans_lower_reward\n"
+        f"cost_discipline=submit_high_confidence_prior; one_cheap_scan_only_when_borderline\n"
         f"recommended_first_action=ask_prior\n"
         f"recommended_next_action={recommended_next_action}\n"
         f"candidate_defects={observation.get('candidate_defects')}\n"
@@ -654,8 +710,10 @@ def _format_observation(observation: dict) -> str:
 def _recommended_next_action(prior: dict) -> str:
     defects = prior.get("predicted_defects") or []
     confidence = float(prior.get("confidence") or 0.0)
-    if defects and confidence >= 0.5:
+    if defects and confidence >= CONFIDENT_PRIOR_COPY_THRESHOLD:
         return "submit_defect_map_with_prior"
+    if defects and confidence >= PRIOR_SUBMIT_THRESHOLD:
+        return "copy_prior_or_one_cheap_scan_then_submit"
     if defects:
         return "optional_one_scan_then_submit"
     return "ask_prior"

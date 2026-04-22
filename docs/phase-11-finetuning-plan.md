@@ -103,11 +103,11 @@ Run the smallest GRPO smoke experiment:
 python training/train_grpo_atomicvision.py --preset smoke --report-to trackio
 ```
 
-This first run is intentionally low-concurrency. `2 × 1` gives a
-`generation_batch_size` of 2, which is divisible by `num_generations=2` and
-opens only two rollout environments. The hosted Space accepts 32 concurrent
-WebSocket sessions, so this stays far below the limit. After the smoke run
-succeeds, increase `--num-generations` first, then batch/accumulation.
+This first run is still conservative, but it now uses a comparison group large
+enough to catch zero-variance failures. `1 x 4` gives a `generation_batch_size`
+of 4, which is divisible by `num_generations=4`. If `reward_std=0`,
+`frac_reward_zero_std=1`, and `grad_norm=0`, stop and increase sampling
+diversity before extending the run.
 
 Save adapters to Hugging Face Hub only when a write token is available:
 
@@ -197,7 +197,18 @@ pushes a LoRA, but the resulting adapter was not promoted:
 - Decision: keep `prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora` as best
 
 The next training run should initialize from the SFT-copy adapter and use the
-format-aware scaffold:
+variance-aware scaffold. Run a short variance probe first:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --preset variance-probe \
+  --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora \
+  --report-to none \
+  --run-name atomicvision-sft-copy-grpo-variance-probe
+```
+
+Only continue if the probe logs nonzero `reward_std`, nonzero `grad_norm`, and
+`frac_reward_zero_std < 1`. Then run the longer continuation:
 
 ```bash
 python training/train_grpo_atomicvision.py \
@@ -205,13 +216,18 @@ python training/train_grpo_atomicvision.py \
   --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora \
   --samples 128 \
   --max-steps 50 \
-  --num-generations 2 \
+  --num-generations 8 \
   --per-device-train-batch-size 1 \
-  --gradient-accumulation-steps 2 \
+  --gradient-accumulation-steps 8 \
   --max-completion-length 768 \
-  --learning-rate 3e-6 \
-  --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-format-lora
+  --temperature 1.2 \
+  --top-p 0.95 \
+  --top-k 50 \
+  --learning-rate 1e-6 \
+  --report-to trackio \
+  --push-to-hub \
+  --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-variance-lora
 ```
 
 The continuation target is to preserve exact tool-copy reliability while
-learning when a weak prior deserves one extra scan.
+learning when a borderline prior deserves one extra scan.

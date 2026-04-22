@@ -13,12 +13,13 @@ python training/train_grpo_atomicvision.py --preset smoke --report-to trackio
 
 Why this is conservative:
 
-- `num-generations=2` gives GRPO a comparison group while keeping rollout
-  concurrency low.
-- `per-device-train-batch-size=2` makes `generation_batch_size=2`, which is
-  required to be divisible by `num_generations=2`.
-- `gradient-accumulation-steps=1` avoids opening many simultaneous OpenEnv
-  sessions during the first gate.
+- `num-generations=4` gives GRPO a larger comparison group while keeping
+  rollout concurrency manageable.
+- `per-device-train-batch-size=1` and `gradient-accumulation-steps=4` make
+  `generation_batch_size=4`, which is required to be divisible by
+  `num_generations=4`.
+- `temperature=1.2`, `top_p=0.95`, and `top_k=50` add enough sampling diversity
+  to detect collapsed zero-advantage runs.
 - The hosted Space supports 32 concurrent WebSocket sessions; first smoke runs
   should stay far below that.
 
@@ -34,6 +35,10 @@ Watch these metrics:
 
 - `tools/failure_frequency`: should decrease as invalid tool calls reduce.
 - `rewards/reward_func/mean`: should move upward toward zero, then positive.
+- `reward_std`: must be nonzero for GRPO to update the policy.
+- `frac_reward_zero_std`: should be below `1.0`; `1.0` means every group has no
+  relative reward signal.
+- `grad_norm`: should become nonzero once advantages are nonzero.
 - `tools/call_frequency`: should become less chaotic after the model learns to
   call `ask_prior` and submit.
 
@@ -53,7 +58,20 @@ Recommended 1.7B run:
 python training/train_grpo_atomicvision.py --preset qwen-1p7b-50 --report-to trackio
 ```
 
-Recommended format-aware SFT-copy continuation run:
+Recommended SFT-copy variance probe:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --preset variance-probe \
+  --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora \
+  --report-to none \
+  --run-name atomicvision-sft-copy-grpo-variance-probe
+```
+
+Continue only if the probe produces nonzero `reward_std`, nonzero `grad_norm`,
+and `frac_reward_zero_std < 1`.
+
+Recommended variance-aware SFT-copy continuation run:
 
 ```bash
 python training/train_grpo_atomicvision.py \
@@ -61,22 +79,25 @@ python training/train_grpo_atomicvision.py \
   --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora \
   --samples 128 \
   --max-steps 50 \
-  --num-generations 2 \
+  --num-generations 8 \
   --per-device-train-batch-size 1 \
-  --gradient-accumulation-steps 2 \
+  --gradient-accumulation-steps 8 \
   --max-completion-length 768 \
-  --learning-rate 3e-6 \
+  --temperature 1.2 \
+  --top-p 0.95 \
+  --top-k 50 \
+  --learning-rate 1e-6 \
   --report-to trackio \
-  --run-name atomicvision-sft-copy-grpo-format-50step \
+  --run-name atomicvision-sft-copy-grpo-variance-50step \
   --push-to-hub \
-  --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-format-lora
+  --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-variance-lora
 ```
 
 Use a smaller learning rate than fresh LoRA GRPO because the SFT-copy adapter
 already matches the prior-submit behavior. The continuation goal is to improve
 weak-prior decisions without damaging exact tool-copy reliability. The script
-now includes the tool-system prompt by default and shapes reward for valid tool
-JSON plus exact confident-prior copying.
+now includes the tool-system prompt by default, shapes reward for valid tool
+JSON, and uses only weak exact-copy shaping for high-confidence priors.
 
 Recommended HF-credit 4B run, only after 1.7B works:
 
@@ -118,10 +139,20 @@ python training/train_grpo_atomicvision.py --dry-run --difficulty easy
 ```
 
 Kaggle often has stricter internet/session behavior. If a Space connection
-fails during training, rerun with the safe smoke configuration and keep
-`num-generations=2`.
+fails during training, rerun with the safe smoke configuration. If
+`reward_std=0`, do not extend the run; increase sampling diversity first.
 
-Kaggle format-aware SFT-copy continuation smoke:
+Kaggle SFT-copy variance probe:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --preset variance-probe \
+  --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora \
+  --report-to none \
+  --run-name atomicvision-kaggle-sft-copy-grpo-variance-probe
+```
+
+Kaggle variance-aware SFT-copy continuation smoke:
 
 ```bash
 python training/train_grpo_atomicvision.py \
@@ -129,15 +160,18 @@ python training/train_grpo_atomicvision.py \
   --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora \
   --samples 64 \
   --max-steps 20 \
-  --num-generations 2 \
+  --num-generations 8 \
   --per-device-train-batch-size 1 \
-  --gradient-accumulation-steps 2 \
+  --gradient-accumulation-steps 8 \
   --max-completion-length 768 \
-  --learning-rate 3e-6 \
+  --temperature 1.2 \
+  --top-p 0.95 \
+  --top-k 50 \
+  --learning-rate 1e-6 \
   --report-to none \
-  --run-name atomicvision-kaggle-sft-copy-grpo-format-20step \
+  --run-name atomicvision-kaggle-sft-copy-grpo-variance-20step \
   --push-to-hub \
-  --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-format-smoke-lora
+  --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-variance-smoke-lora
 ```
 
 ## Hugging Face Training
@@ -173,7 +207,7 @@ hf jobs run \
   --timeout 3h \
   --secrets HF_TOKEN \
   pytorch/pytorch:2.6.0-cuda12.4-cudnn9-devel \
-  bash -lc "git clone https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv AtomicVision && cd AtomicVision && pip install -r training/requirements-grpo.txt && python training/train_grpo_atomicvision.py --model Qwen/Qwen3-1.7B --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora --samples 256 --max-steps 200 --num-generations 4 --per-device-train-batch-size 4 --gradient-accumulation-steps 1 --max-completion-length 768 --learning-rate 3e-6 --report-to trackio --run-name atomicvision-hf-sft-copy-grpo-format-200step --push-to-hub --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-format-lora"
+  bash -lc "git clone https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv AtomicVision && cd AtomicVision && pip install -r training/requirements-grpo.txt && python training/train_grpo_atomicvision.py --model Qwen/Qwen3-1.7B --adapter-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-lora --samples 256 --max-steps 200 --num-generations 8 --per-device-train-batch-size 1 --gradient-accumulation-steps 8 --max-completion-length 768 --temperature 1.2 --top-p 0.95 --top-k 50 --learning-rate 1e-6 --report-to trackio --run-name atomicvision-hf-sft-copy-grpo-variance-200step --push-to-hub --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-sft-copy-grpo-variance-lora"
 ```
 
 For 4B, use `a10g-large` or better and a longer timeout.
@@ -182,11 +216,12 @@ For 4B, use `a10g-large` or better and a longer timeout.
 
 Only scale after the previous run reaches at least one completed training step.
 
-1. Smoke: `num-generations=2`, batch `2`, accumulation `1`, steps `5`.
-2. Colab learning run: 0.6B, `num-generations=2`, batch `2`, steps `20`.
-3. Demo: 1.7B, `num-generations=2`, batch `2`, steps `50`.
-4. Stronger HF-credit run: 1.7B or 4B, `num-generations=4`, batch `4`,
-   steps `100-300`.
+1. Smoke: `num-generations=4`, batch `1`, accumulation `4`, steps `5`.
+2. Variance probe: 1.7B continuation, `num-generations=8`, batch `1`,
+   accumulation `8`, steps `3`.
+3. Demo: 1.7B, `num-generations=8`, batch `1`, accumulation `8`, steps `50`.
+4. Stronger HF-credit run: 1.7B or 4B, `num-generations=8`, batch `1`,
+   accumulation `8`, steps `100-300`.
 
 ## Common Failures
 
@@ -197,3 +232,6 @@ Only scale after the previous run reaches at least one completed training step.
 - `jmespath` missing: run `pip install jmespath` or reinstall requirements.
 - `ConnectionClosedOK`: pull latest code and use the safe smoke configuration.
   It lowers rollout concurrency and retries reset connections.
+- `loss=0`, `grad_norm=0`, `reward_std=0`, `frac_reward_zero_std=1`: the model
+  produced identical-reward generations. Stop the run, increase sampling
+  diversity, and do not promote that adapter.
