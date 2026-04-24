@@ -40,6 +40,10 @@ SCAN_SAMPLE_TYPE = "submit_after_reference"
 SAMPLE_TYPES = BASE_SAMPLE_TYPES | {SCAN_SAMPLE_TYPE}
 COST_AWARE_SUBMIT_PRIOR_RATIO = 0.85
 COST_AWARE_REFERENCE_RATIO = 0.10
+FORMAT_REPAIR_SUBMIT_PRIOR_RATIO = 0.40
+FORMAT_REPAIR_REFERENCE_RATIO = 0.10
+SUBMIT_BRIDGE_SUBMIT_PRIOR_RATIO = 0.75
+SUBMIT_BRIDGE_REFERENCE_RATIO = 0.10
 
 
 def build_sft_examples(
@@ -144,6 +148,36 @@ def build_cost_aware_sft_examples(
                 )
             )
     return examples
+
+
+def build_two_step_curriculum_examples(
+    examples_per_difficulty: int,
+    difficulties: tuple[str, ...] = ("medium",),
+    seed_start: int = 0,
+    min_scan_improvement: float = 0.25,
+    max_scan_candidates_per_difficulty: int | None = None,
+) -> list[dict[str, Any]]:
+    """Build the official two-stage schema curriculum used for held-out repair."""
+
+    repair = build_cost_aware_sft_examples(
+        examples_per_difficulty=examples_per_difficulty,
+        difficulties=difficulties,
+        seed_start=seed_start,
+        submit_prior_ratio=FORMAT_REPAIR_SUBMIT_PRIOR_RATIO,
+        reference_ratio=FORMAT_REPAIR_REFERENCE_RATIO,
+        min_scan_improvement=min_scan_improvement,
+        max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+    )
+    bridge = build_cost_aware_sft_examples(
+        examples_per_difficulty=examples_per_difficulty,
+        difficulties=difficulties,
+        seed_start=seed_start,
+        submit_prior_ratio=SUBMIT_BRIDGE_SUBMIT_PRIOR_RATIO,
+        reference_ratio=SUBMIT_BRIDGE_REFERENCE_RATIO,
+        min_scan_improvement=min_scan_improvement,
+        max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+    )
+    return [*repair, *bridge]
 
 
 def build_episode_examples(
@@ -377,11 +411,15 @@ def main() -> None:
     parser.add_argument("--episodes-per-difficulty", type=int, default=256)
     parser.add_argument(
         "--profile",
-        choices=("explicit", "cost_aware"),
+        choices=("explicit", "cost_aware", "format_repair", "submit_bridge", "two_step_curriculum"),
         default="explicit",
         help=(
             "explicit uses --sample-types as-is. cost_aware creates a "
-            "cheap-prior-biased mix for assistant-masked SFT."
+            "cheap-prior-biased mix for assistant-masked SFT. "
+            "format_repair creates a held-out repair mix with many more "
+            "first-step ask_prior rows. submit_bridge strengthens the "
+            "second-turn submit_defect_map schema. two_step_curriculum "
+            "concatenates both phases into one reproducible dataset."
         ),
     )
     parser.add_argument("--seed-start", type=int, default=0)
@@ -429,6 +467,46 @@ def main() -> None:
             seed_start=args.seed_start,
             submit_prior_ratio=args.submit_prior_ratio,
             reference_ratio=args.reference_ratio,
+            min_scan_improvement=args.min_scan_improvement,
+            max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+        )
+    elif args.profile == "format_repair":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = FORMAT_REPAIR_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = FORMAT_REPAIR_REFERENCE_RATIO
+        examples = build_cost_aware_sft_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            submit_prior_ratio=submit_prior_ratio,
+            reference_ratio=reference_ratio,
+            min_scan_improvement=args.min_scan_improvement,
+            max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+        )
+    elif args.profile == "submit_bridge":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = SUBMIT_BRIDGE_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = SUBMIT_BRIDGE_REFERENCE_RATIO
+        examples = build_cost_aware_sft_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            submit_prior_ratio=submit_prior_ratio,
+            reference_ratio=reference_ratio,
+            min_scan_improvement=args.min_scan_improvement,
+            max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+        )
+    elif args.profile == "two_step_curriculum":
+        examples = build_two_step_curriculum_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
             min_scan_improvement=args.min_scan_improvement,
             max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
         )

@@ -8,9 +8,12 @@ import pytest
 
 from training.train_grpo_atomicvision import (
     AtomicVisionToolEnv,
+    canonicalize_tool_call_text,
     CONFIDENT_PRIOR_COPY_THRESHOLD,
     CONFIDENT_PRIOR_MIS_COPY_PENALTY,
     EXACT_PRIOR_COPY_REWARD,
+    parse_strict_tool_call,
+    repair_tool_call,
     TRAINING_PRESETS,
     VALID_TOOL_CALL_FORMAT_REWARD,
     TOOL_SYSTEM_PROMPT,
@@ -57,6 +60,28 @@ def test_prompt_rows_allow_system_prompt_ablation() -> None:
     assert rows["prompt"][0][0]["role"] == "user"
 
 
+def test_tool_system_prompt_uses_explicit_schema_examples() -> None:
+    assert "<tool_call>...</tool_call>" not in TOOL_SYSTEM_PROMPT
+    assert '"name":"ask_prior"' in TOOL_SYSTEM_PROMPT
+    assert '"name":"submit_defect_map"' in TOOL_SYSTEM_PROMPT
+    assert "nothing else" in TOOL_SYSTEM_PROMPT
+
+
+def test_frontier_prompt_rows_select_seed_subset_for_grpo() -> None:
+    rows = build_prompt_rows(
+        samples=3,
+        difficulty="medium",
+        seed_start=0,
+        prompt_focus="grpo-frontier",
+        max_seed_candidates=32,
+    )
+
+    assert len(rows["prompt"]) == 3
+    assert rows["prompt_focus"] == ["grpo-frontier"] * 3
+    assert rows["seed"] == sorted(rows["seed"])
+    assert rows["seed"][0] >= 0
+
+
 def test_build_dataset_has_clear_optional_dependency_error() -> None:
     try:
         import datasets  # noqa: F401
@@ -73,6 +98,7 @@ def test_reward_func_reads_environment_rewards() -> None:
             self.reward = reward
             self.last_prior_prediction = None
             self.last_submit_action = None
+            self.last_reward_breakdown = None
 
     assert reward_func([DummyEnv(1.25), DummyEnv(-0.5)]) == [1.25, -0.5]
 
@@ -134,6 +160,40 @@ def test_tool_call_format_reward_penalizes_missing_or_invalid_tool_call() -> Non
     assert _tool_call_format_reward("<tool_call>{bad json}</tool_call>") < 0.0
 
 
+def test_repair_tool_call_recovers_shorthand_ask_prior() -> None:
+    call = repair_tool_call("<tool_call> ask_prior")
+
+    assert call == {"name": "ask_prior", "arguments": {}}
+    assert canonicalize_tool_call_text("<tool_call> ask_prior") == (
+        '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call>'
+    )
+
+
+def test_repair_tool_call_recovers_submit_from_defect_map_payload() -> None:
+    call = repair_tool_call(
+        "\n".join(
+            [
+                "<tool_call>...</tool_call>",
+                "submit_defect_map",
+                '{"defect_map":{"Zn":0.19,"P":0.05},"confidence":0.65}',
+            ]
+        )
+    )
+
+    assert call == {
+        "name": "submit_defect_map",
+        "arguments": {
+            "predicted_defects": ["Zn", "P"],
+            "predicted_concentrations": [0.19, 0.05],
+            "confidence": 0.65,
+        },
+    }
+
+
+def test_parse_strict_tool_call_rejects_shorthand_repairable_text() -> None:
+    assert parse_strict_tool_call("<tool_call> ask_prior") is None
+
+
 def test_training_presets_keep_grpo_generation_batch_valid() -> None:
     for preset in TRAINING_PRESETS.values():
         generation_batch_size = (
@@ -155,6 +215,20 @@ def test_apply_preset_overrides_training_args() -> None:
     assert args.model == "Qwen/Qwen3-1.7B"
     assert args.samples == 128
     assert args.run_name == "atomicvision-grpo-1p7b-50step"
+
+
+def test_cost_aware_grpo_presets_focus_on_frontier_seed_pool() -> None:
+    for preset_name in (
+        "cost-aware-variance-probe",
+        "cost-aware-grpo-20",
+        "cost-aware-grpo-100",
+    ):
+        preset = TRAINING_PRESETS[preset_name]
+
+        assert preset["prompt_focus"] == "grpo-frontier"
+        assert preset["seed_start"] >= 2000
+        assert preset["scale_rewards"] == "batch"
+        assert preset["learning_rate"] <= 1.0e-6
 
 
 def test_apply_preset_preserves_explicit_run_name() -> None:
@@ -189,6 +263,12 @@ def test_cli_accepts_adapter_continuation_args() -> None:
             "0.001",
             "--loss-type",
             "dr_grpo",
+            "--prompt-focus",
+            "grpo-frontier",
+            "--seed-start",
+            "2000",
+            "--min-reference-improvement",
+            "1.0",
         ]
     )
 
@@ -201,6 +281,9 @@ def test_cli_accepts_adapter_continuation_args() -> None:
     assert args.scale_rewards == "batch"
     assert args.beta == 0.001
     assert args.loss_type == "dr_grpo"
+    assert args.prompt_focus == "grpo-frontier"
+    assert args.seed_start == 2000
+    assert args.min_reference_improvement == 1.0
     assert args.no_tool_system_prompt is False
 
 

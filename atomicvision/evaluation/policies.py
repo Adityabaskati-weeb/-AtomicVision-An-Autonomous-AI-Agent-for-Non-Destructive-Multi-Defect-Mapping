@@ -31,6 +31,11 @@ class PolicyEpisodeResult:
     done: bool
     f1: float
     concentration_mae: float
+    identity_reward: float
+    concentration_reward: float
+    confidence_reward: float
+    outcome_reward_total: float
+    penalty_total: float
     timeout: bool
 
 
@@ -46,6 +51,11 @@ class PolicyEvaluationSummary:
     mean_scan_cost: float
     mean_f1: float
     mean_concentration_mae: float
+    mean_identity_reward: float
+    mean_concentration_reward: float
+    mean_confidence_reward: float
+    mean_outcome_reward_total: float
+    mean_penalty_total: float
     timeout_rate: float
 
     def to_dict(self) -> dict[str, float | int | str]:
@@ -72,6 +82,26 @@ def evaluate_policy(
         mean_f1=round(_mean(result.f1 for result in results), 6),
         mean_concentration_mae=round(
             _mean(result.concentration_mae for result in results),
+            6,
+        ),
+        mean_identity_reward=round(
+            _mean(result.identity_reward for result in results),
+            6,
+        ),
+        mean_concentration_reward=round(
+            _mean(result.concentration_reward for result in results),
+            6,
+        ),
+        mean_confidence_reward=round(
+            _mean(result.confidence_reward for result in results),
+            6,
+        ),
+        mean_outcome_reward_total=round(
+            _mean(result.outcome_reward_total for result in results),
+            6,
+        ),
+        mean_penalty_total=round(
+            _mean(result.penalty_total for result in results),
             6,
         ),
         timeout_rate=round(
@@ -117,6 +147,20 @@ def run_policy_episode(
         done=observation.done,
         f1=float(breakdown.get("f1", 0.0)),
         concentration_mae=float(breakdown.get("concentration_mae", 0.0)),
+        identity_reward=float(breakdown.get("identity_reward", 0.0)),
+        concentration_reward=float(breakdown.get("concentration_reward", 0.0)),
+        confidence_reward=float(breakdown.get("confidence_reward", 0.0)),
+        outcome_reward_total=float(
+            breakdown.get("identity_reward", 0.0)
+            + breakdown.get("concentration_reward", 0.0)
+            + breakdown.get("confidence_reward", 0.0)
+        ),
+        penalty_total=float(
+            breakdown.get("false_positive_penalty", 0.0)
+            + breakdown.get("missed_defect_penalty", 0.0)
+            + breakdown.get("scan_cost_penalty", 0.0)
+            + breakdown.get("timeout_penalty", 0.0)
+        ),
         timeout=bool(breakdown.get("timeout_penalty", 0.0) < 0.0),
     )
 
@@ -231,4 +275,3 @@ def _oracle_policy(env: AtomicVisionEnvironment) -> AtomicVisionObservation:
 def _mean(values) -> float:
     materialized = list(values)
     return sum(materialized) / len(materialized)
-

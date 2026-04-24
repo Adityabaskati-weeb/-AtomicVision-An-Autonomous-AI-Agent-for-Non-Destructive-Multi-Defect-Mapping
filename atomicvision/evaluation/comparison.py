@@ -135,13 +135,14 @@ def _markdown_report(comparison: RewardComparison) -> str:
             "",
             "## Full Results",
             "",
-            "| Difficulty | Policy | Reward | F1 | Concentration MAE | Steps | Scan cost | Timeout rate |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Difficulty | Policy | Reward | Outcome | Penalty | F1 | Concentration MAE | Steps | Scan cost | Timeout rate |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in comparison.rows:
         lines.append(
             f"| {row.difficulty} | {row.policy_name} | {row.mean_reward:.3f} | "
+            f"{row.mean_outcome_reward_total:.3f} | {row.mean_penalty_total:.3f} | "
             f"{row.mean_f1:.3f} | {row.mean_concentration_mae:.4f} | "
             f"{row.mean_steps:.2f} | {row.mean_scan_cost:.2f} | {row.timeout_rate:.2f} |"
         )
@@ -233,4 +234,3 @@ def _best_policy_by_difficulty(
         if current is None or row.mean_reward > current.mean_reward:
             best[row.difficulty] = row
     return best
-

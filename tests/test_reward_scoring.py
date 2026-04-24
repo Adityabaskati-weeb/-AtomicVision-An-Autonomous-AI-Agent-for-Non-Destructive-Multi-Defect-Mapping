@@ -3,7 +3,12 @@ from __future__ import annotations
 import pytest
 
 from atomicvision.evaluation import aggregate_rewards
-from atomicvision.rewards import scan_cost_penalty_for, score_submission
+from atomicvision.rewards import (
+    reward_component_dict,
+    reward_source_totals,
+    scan_cost_penalty_for,
+    score_submission,
+)
 from atomicvision.synthetic import generate_case
 
 
@@ -129,4 +134,27 @@ def test_aggregate_rewards_reports_mean_metrics() -> None:
 
     assert metrics.episodes == 2
     assert metrics.mean_reward == round((first.total_reward + second.total_reward) / 2, 6)
+    assert metrics.mean_outcome_reward_total == round(
+        (first.outcome_reward_total + second.outcome_reward_total) / 2,
+        6,
+    )
+    assert metrics.mean_penalty_total == round(
+        (first.penalty_total + second.penalty_total) / 2,
+        6,
+    )
     assert metrics.timeout_rate == 0.5
+
+
+def test_reward_helpers_expose_component_and_source_views() -> None:
+    case = generate_case(seed=7, difficulty="medium")
+    defects, concentrations = _truth(case)
+    reward = score_submission(case, defects, concentrations, confidence=0.8, scan_cost=1.5)
+
+    components = reward_component_dict(reward)
+    sources = reward_source_totals(reward)
+
+    assert components["identity_reward"] == reward.identity_reward
+    assert components["scan_cost_penalty"] == reward.scan_cost_penalty
+    assert sources["outcome_reward_total"] == reward.outcome_reward_total
+    assert sources["penalty_total"] == reward.penalty_total
+    assert round(sources["outcome_reward_total"] + sources["penalty_total"], 6) == reward.total_reward

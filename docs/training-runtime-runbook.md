@@ -142,6 +142,113 @@ Kaggle often has stricter internet/session behavior. If a Space connection
 fails during training, rerun with the safe smoke configuration. If
 `reward_std=0`, do not extend the run; increase sampling diversity first.
 
+## NaN SFT Failure Protocol
+
+If any SFT run logs `loss nan`, that run is invalid even if it saved
+checkpoints. Do not promote that adapter and do not start GRPO from it.
+
+Use the NaN-safe trainer instead:
+
+```bash
+python training/train_sft_atomicvision_safe.py \
+  --dataset-jsonl outputs/sft/atomicvision_cost_aware_masked_sft.jsonl \
+  --validate-only
+```
+
+Then run a tiny sanity train:
+
+```bash
+python training/train_sft_atomicvision_safe.py \
+  --dataset-jsonl outputs/sft/atomicvision_cost_aware_masked_sft.jsonl \
+  --model Qwen/Qwen3-1.7B \
+  --output-dir /kaggle/working/atomicvision-sft-sanity-lora \
+  --max-examples 64 \
+  --max-updates 5 \
+  --checkpoint-steps 5 \
+  --learning-rate 2e-5 \
+  --max-grad-norm 1.0 \
+  --overwrite-output-dir
+```
+
+Only if that prints finite losses should you run the full safe SFT:
+
+```bash
+python training/train_sft_atomicvision_safe.py \
+  --dataset-jsonl outputs/sft/atomicvision_cost_aware_masked_sft.jsonl \
+  --model Qwen/Qwen3-1.7B \
+  --output-dir /kaggle/working/atomicvision-cost-aware-masked-sft-lora \
+  --max-updates 80 \
+  --grad-accum 8 \
+  --batch-size 1 \
+  --max-length 1536 \
+  --learning-rate 2e-5 \
+  --max-grad-norm 1.0 \
+  --lora-r 16 \
+  --lora-alpha 32 \
+  --lora-dropout 0.05 \
+  --checkpoint-steps 40 60 80 \
+  --overwrite-output-dir
+```
+
+The safe trainer aborts on malformed JSONL, zero assistant-label tokens,
+non-finite loss, or non-finite gradient norm.
+
+## Persist Adapters Immediately
+
+Kaggle and Colab working directories are transient. After any adapter train you
+want to keep, publish it to a Hugging Face **model repo** immediately. Do not
+rely on the Space itself as adapter storage.
+
+Recommended command:
+
+```bash
+python training/publish_adapter_to_hub.py \
+  --adapter-dir /kaggle/working/atomicvision-format-submit-merged-lora \
+  --repo-id prodigyhuh/atomicvision-format-submit-merged-lora \
+  --base-model Qwen/Qwen3-1.7B \
+  --include-zip
+```
+
+Why a model repo instead of a Space:
+
+- model repos are the natural storage target for adapter artifacts,
+- they are easier to download from Kaggle with one URL,
+- the Space can still reference the model repo in its README or runtime config.
+
+Before any GRPO continuation, run the official held-out evaluator in both
+strict and normalized modes:
+
+```bash
+python training/evaluate_atomicvision_adapter.py \
+  --adapter-dir /kaggle/working/atomicvision-format-submit-merged-lora \
+  --base-model Qwen/Qwen3-1.7B \
+  --difficulties medium hard \
+  --episodes 32 \
+  --seed-start 1000 \
+  --output-json /kaggle/working/atomicvision_adapter_eval.json
+```
+
+Watch these verifier columns first:
+
+- `strict_tool_call_pass_rate`
+- `normalized_tool_call_pass_rate`
+- `first_action_valid_rate`
+- `first_action_ask_prior_rate`
+- `submit_action_rate`
+- `done_rate`
+- `tool_failure_rate`
+
+Then inspect the grouped reward-source columns in the JSON report:
+
+- `mean_outcome_reward_total`
+- `mean_penalty_total`
+- `mean_identity_reward`
+- `mean_concentration_reward`
+- `mean_confidence_reward`
+
+Only continue to GRPO if strict execution is healthy or normalized execution
+shows that the policy is correct and the remaining gap is purely formatting.
+
 Kaggle SFT-copy variance probe:
 
 ```bash
@@ -201,14 +308,18 @@ Recommended Kaggle data generation command:
 
 ```bash
 python training/generate_atomicvision_sft_data.py \
-  --profile cost_aware \
-  --episodes-per-difficulty 512 \
-  --difficulties medium \
-  --submit-prior-ratio 0.85 \
-  --reference-ratio 0.10 \
+  --profile two_step_curriculum \
+  --episodes-per-difficulty 256 \
+  --seed-start 1000 \
+  --difficulties medium hard \
   --min-scan-improvement 0.25 \
-  --output-jsonl outputs/sft/atomicvision_cost_aware_masked_sft.jsonl
+  --output-jsonl outputs/sft/atomicvision_two_step_curriculum_sft.jsonl
 ```
+
+This profile concatenates two reproducible phases:
+
+- `format_repair`: many more first-step `ask_prior` rows
+- `submit_bridge`: many more second-step `submit_defect_map` rows
 
 Expected sample mix for 512 medium rows:
 
@@ -230,8 +341,36 @@ Medium direct rollout result:
 - Tool failure rate: `0.0`
 - Done rate: `1.0`
 
-This is the current best checkpoint. Do not run GRPO as the default next step;
-use it only as an ablation after the demo artifact is saved.
+This is the current best checkpoint. The next improvement focus is GRPO, but
+only behind a held-out and variance gate. Do not start with a long run. First
+run the cost-aware variance probe from the promoted adapter:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --preset cost-aware-variance-probe \
+  --adapter-model-id /kaggle/working/atomicvision-best-cost-aware-masked-sft-lora \
+  --report-to none \
+  --run-name atomicvision-cost-aware-grpo-variance-probe
+```
+
+This preset uses `--prompt-focus grpo-frontier`, `--seed-start 2000`, and a
+frontier seed scan. That means GRPO trains on uncertain or reference-improvable
+episodes instead of replaying the easy deterministic SFT cases.
+
+Continue only if `reward_std > 0`, `frac_reward_zero_std < 1`, and `grad_norm`
+is nonzero. The first continuation should be short:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --preset cost-aware-grpo-20 \
+  --adapter-model-id /kaggle/working/atomicvision-best-cost-aware-masked-sft-lora \
+  --report-to trackio \
+  --output-dir /kaggle/working/atomicvision-cost-aware-grpo-20-lora \
+  --run-name atomicvision-cost-aware-grpo-20step
+```
+
+Promote a GRPO adapter only after held-out evaluation beats the promoted SFT
+checkpoint without raising scan cost or tool failures.
 
 Generate reference-improvement SFT rows on Kaggle:
 
@@ -299,16 +438,35 @@ hf jobs run \
 
 For 4B, use `a10g-large` or better and a longer timeout.
 
+Example HF Jobs command for the promoted cost-aware GRPO focus run, after the
+adapter has been pushed to a Hugging Face model repo:
+
+```bash
+hf jobs run \
+  --flavor a10g-large \
+  --timeout 3h \
+  --secrets HF_TOKEN \
+  pytorch/pytorch:2.6.0-cuda12.4-cudnn9-devel \
+  bash -lc "git clone https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv AtomicVision && cd AtomicVision && pip install -r training/requirements-grpo.txt && python training/train_grpo_atomicvision.py --preset cost-aware-grpo-100 --adapter-model-id prodigyhuh/atomicvision-best-cost-aware-masked-sft-lora --report-to trackio --run-name atomicvision-hf-cost-aware-grpo-100step --push-to-hub --hub-model-id prodigyhuh/atomicvision-qwen3-1p7b-cost-aware-grpo-lora"
+```
+
+If the promoted adapter is still only local in Kaggle, use the local
+`/kaggle/working/atomicvision-best-cost-aware-masked-sft-lora` path instead of
+the Hub model id.
+
 ## Scaling Ladder
 
 Only scale after the previous run reaches at least one completed training step.
 
 1. Smoke: `num-generations=4`, batch `1`, accumulation `4`, steps `5`.
-2. Variance probe: 1.7B continuation, `num-generations=8`, batch `1`,
+2. Held-out eval: promoted SFT adapter on `medium` and `hard`, seeds
+   `1000-1031`.
+3. Variance probe: `cost-aware-variance-probe`, `num-generations=8`, batch `1`,
    accumulation `8`, steps `3`.
-3. Demo: 1.7B, `num-generations=8`, batch `1`, accumulation `8`, steps `50`.
-4. Stronger HF-credit run: 1.7B or 4B, `num-generations=8`, batch `1`,
-   accumulation `8`, steps `100-300`.
+4. Demo continuation: `cost-aware-grpo-20`, `num-generations=8`, batch `1`,
+   accumulation `8`, steps `20`.
+5. Stronger HF-credit run: `cost-aware-grpo-100`, `num-generations=8`, batch
+   `1`, accumulation `8`, steps `100`.
 
 ## Common Failures
 

@@ -213,6 +213,35 @@ This beats both the prior-submit baseline and the previous SFT-copy adapter.
 Full aggregate details are in
 [`cost-aware-masked-sft-results.md`](cost-aware-masked-sft-results.md).
 
+## Next GRPO Focus From Promoted Adapter
+
+The next improvement phase should focus on GRPO, but not as an unguarded long
+run. Start from the promoted cost-aware adapter and first prove that grouped
+rollouts have variance:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --preset cost-aware-variance-probe \
+  --adapter-model-id /kaggle/working/atomicvision-best-cost-aware-masked-sft-lora \
+  --report-to none
+```
+
+If `reward_std > 0`, `frac_reward_zero_std < 1`, and `grad_norm > 0`, continue
+with:
+
+```bash
+python training/train_grpo_atomicvision.py \
+  --preset cost-aware-grpo-20 \
+  --adapter-model-id /kaggle/working/atomicvision-best-cost-aware-masked-sft-lora \
+  --report-to trackio \
+  --output-dir /kaggle/working/atomicvision-cost-aware-grpo-20-lora
+```
+
+Do not promote a GRPO checkpoint from training reward alone. It must beat the
+promoted SFT checkpoint on held-out seeds or hard/reference-improvement cases.
+The detailed gate is in
+[`phase-14-heldout-grpo-roadmap.md`](phase-14-heldout-grpo-roadmap.md).
+
 ## GRPO Continuation From SFT-Copy Adapter
 
 The first Kaggle continuation smoke proved that the training path runs and

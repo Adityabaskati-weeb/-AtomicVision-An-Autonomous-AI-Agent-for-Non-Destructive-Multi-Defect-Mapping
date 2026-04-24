@@ -19,6 +19,17 @@ scientific lab environment: an agent receives non-invasive vibrational spectra,
 chooses characterization actions, and submits a defect map while balancing
 accuracy against scan cost.
 
+## Quick Links
+
+- Theme fit: `Theme #3.1 - World Modeling / Professional Tasks`
+- Hugging Face Space: [prodigyhuh/atomicvision-openenv](https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv)
+- Public app host: [prodigyhuh-atomicvision-openenv.hf.space](https://prodigyhuh-atomicvision-openenv.hf.space)
+- Training notebook: [notebooks/AtomicVision_GRPO_Colab.ipynb](notebooks/AtomicVision_GRPO_Colab.ipynb)
+- Deployment notes: [docs/phase-9-huggingface-deployment.md](docs/phase-9-huggingface-deployment.md)
+- Runtime runbook: [docs/training-runtime-runbook.md](docs/training-runtime-runbook.md)
+- Submission checklist: [docs/hackathon-submission-checklist.md](docs/hackathon-submission-checklist.md)
+- Mini-blog draft: [docs/hackathon-mini-blog-draft.md](docs/hackathon-mini-blog-draft.md)
+
 The project is moving phase by phase. Each stage is implemented only after the
 previous gate has been validated.
 
@@ -38,8 +49,12 @@ previous gate has been validated.
 - Phase 11: GRPO Fine-Tuning Scaffold
 - Phase 12: SFT Copy LoRA Rollout
 - Phase 13: Format-Aware GRPO Continuation
+- Phase 14: Held-Out Evaluation And GRPO Roadmap
+- Phase 15: NaN-Safe SFT Recovery
+- Phase 16: Format-Repair And Two-Step Curriculum
 - Status: Cost-aware assistant-masked SFT checkpoint-40 is the best promoted
-  checkpoint; GRPO is now an ablation rather than the default next step
+  checkpoint only for finite-loss runs; any new Kaggle SFT run with `loss nan`
+  must be discarded and rerun through the NaN-safe SFT trainer before GRPO
 - Scope document: [docs/phase-0-scope-lock.md](docs/phase-0-scope-lock.md)
 - System design: [docs/phase-1-system-design.md](docs/phase-1-system-design.md)
 - Environment contract: [docs/phase-2-environment-contract.md](docs/phase-2-environment-contract.md)
@@ -52,21 +67,47 @@ previous gate has been validated.
 - Hugging Face deployment: [docs/phase-9-huggingface-deployment.md](docs/phase-9-huggingface-deployment.md)
 - Phase 10 notes: [docs/phase-10-reward-comparison-and-colab.md](docs/phase-10-reward-comparison-and-colab.md)
 - Phase 11 notes: [docs/phase-11-finetuning-plan.md](docs/phase-11-finetuning-plan.md)
+- Lecture 91 method notes: [docs/lecture-91-openenv-method-notes.md](docs/lecture-91-openenv-method-notes.md)
 - Training runbook: [docs/training-runtime-runbook.md](docs/training-runtime-runbook.md)
+- Held-out + GRPO roadmap: [docs/phase-14-heldout-grpo-roadmap.md](docs/phase-14-heldout-grpo-roadmap.md)
+- NaN-safe SFT recovery: [docs/phase-15-nan-safe-sft-recovery.md](docs/phase-15-nan-safe-sft-recovery.md)
+- Format-repair SFT: [docs/phase-16-format-repair-sft.md](docs/phase-16-format-repair-sft.md)
 - Reward comparison: [docs/reward-comparison-report.md](docs/reward-comparison-report.md)
 - SFT-copy rollout result: [docs/sft-copy-lora-results.md](docs/sft-copy-lora-results.md)
 - Cost-aware masked SFT result: [docs/cost-aware-masked-sft-results.md](docs/cost-aware-masked-sft-results.md)
 - GRPO continuation smoke result: [docs/grpo-continuation-smoke-results.md](docs/grpo-continuation-smoke-results.md)
 - Colab bridge: [notebooks/AtomicVision_GRPO_Colab.ipynb](notebooks/AtomicVision_GRPO_Colab.ipynb)
 
-## Latest Result
+## Current Gate Status
 
-Kaggle cost-aware assistant-masked SFT produced the current best Qwen3-1.7B
-LoRA checkpoint. It preserves the cheap `ask_prior -> submit_defect_map`
-behavior while improving reward and concentration accuracy over the prior-submit
-baseline.
+AtomicVision is now in a verifier-hardening phase before GRPO. The current
+question is not "can we train another adapter?" but "can the trained adapter
+reliably emit valid tool calls on held-out seeds?"
 
-Promoted checkpoint: `/kaggle/working/atomicvision-cost-aware-masked-sft-lora/checkpoint-40`
+Current status:
+
+- Stable environment: yes
+- Stable NaN-safe SFT path: yes
+- Held-out strict tool-call gate: blocked
+- Official normalized held-out eval path: implemented
+- GRPO readiness: not yet
+
+The project now tracks both:
+
+- **strict execution**: the model must emit one exact JSON tool call
+- **normalized execution**: near-miss outputs are canonicalized for diagnosis
+
+This split makes it much easier to tell whether a failure is:
+
+- policy quality
+- tool-call formatting
+- or a reward / execution mismatch
+
+## Best Demo Result
+
+The best current in-distribution demo result is still the cost-aware masked SFT
+checkpoint-40 on medium episodes. That result is useful for the demo package,
+but it is **not** yet the final held-out promotion bar.
 
 | Evaluation | Episodes | Reward | F1 | MAE | Steps | Scan cost | Tool failures | Done rate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -75,21 +116,37 @@ Promoted checkpoint: `/kaggle/working/atomicvision-cost-aware-masked-sft-lora/ch
 | SFT-copy direct rollout | 32 | 4.458 | 0.790 | 0.0321 | 2.06 | 1.55 | 0.00 | 1.00 |
 | Prior-submit baseline | 32 | 4.366 | 0.773 | 0.0318 | 2.00 | 1.50 | 0.00 | 1.00 |
 
-The cost-aware checkpoint outperforms the deterministic prior-submit baseline
-while preserving 0% malformed tool calls, 100% episode completion, and the same
-low scan cost.
-
 ![Model improvement chart](docs/model-improvement-chart.svg)
 
 ![Cost and reliability chart](docs/cost-reliability-chart.svg)
 
-The first 20-step GRPO continuation from this adapter completed successfully on
-Kaggle, but it was not promoted: with the required tool-system prompt it matched
-the prior-submit baseline (`4.366` reward, `0.773` F1) and remained below the
-SFT-copy adapter. A follow-up format-aware smoke also produced valid tool calls
-but logged `reward_std=0`, `frac_reward_zero_std=1`, `loss=0`, and
-`grad_norm=0`, confirming that grouped rollouts had no relative reward signal.
-The GRPO scaffold remains available, but it is no longer the default next step.
-GRPO should be treated as a controlled ablation because the promoted
-cost-aware SFT checkpoint already beats the baseline and previous GRPO attempts
-risked zero-variance or behavior regression.
+## Held-Out Verifier Columns
+
+The official adapter evaluator now reports:
+
+- `strict_tool_call_pass_rate`
+- `normalized_tool_call_pass_rate`
+- `normalized_tool_call_repair_rate`
+- `first_action_valid_rate`
+- `first_action_ask_prior_rate`
+- `submit_action_rate`
+- `done_rate`
+- `tool_failure_rate`
+
+This is the current reliability gate before GRPO. A model that only looks good
+on reward but fails these verifier columns is not considered ready.
+
+## Next Training Gate
+
+The next promotion order is:
+
+1. run strict + normalized held-out eval with `training/evaluate_atomicvision_adapter.py`
+2. confirm non-zero success on held-out seeds
+3. only then run `cost-aware-variance-probe`
+4. only then run short GRPO continuation
+
+The earlier 20-step GRPO continuation completed successfully on Kaggle, but it
+was not promoted. More importantly, later held-out recovery runs showed that
+tool-call formatting can still collapse even when training loss looks healthy.
+That is why verifier columns are now treated as first-class gates rather than
+optional diagnostics.

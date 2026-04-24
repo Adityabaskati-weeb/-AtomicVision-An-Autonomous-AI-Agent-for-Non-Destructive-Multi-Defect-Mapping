@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from atomicvision.synthetic.types import MaterialCase
@@ -9,6 +10,18 @@ from atomicvision.synthetic.types import MaterialCase
 
 SCAN_COST_PENALTY_RATE = 0.4
 SCAN_COST_PENALTY_CAP = 4.0
+OUTCOME_COMPONENT_NAMES = (
+    "identity_reward",
+    "concentration_reward",
+    "confidence_reward",
+)
+PENALTY_COMPONENT_NAMES = (
+    "false_positive_penalty",
+    "missed_defect_penalty",
+    "scan_cost_penalty",
+    "timeout_penalty",
+)
+REWARD_COMPONENT_NAMES = OUTCOME_COMPONENT_NAMES + PENALTY_COMPONENT_NAMES
 
 
 @dataclass(frozen=True)
@@ -27,6 +40,33 @@ class RewardBreakdown:
     recall: float
     f1: float
     concentration_mae: float
+
+    @property
+    def outcome_reward_total(self) -> float:
+        return round(
+            self.identity_reward + self.concentration_reward + self.confidence_reward,
+            6,
+        )
+
+    @property
+    def penalty_total(self) -> float:
+        return round(
+            self.false_positive_penalty
+            + self.missed_defect_penalty
+            + self.scan_cost_penalty
+            + self.timeout_penalty,
+            6,
+        )
+
+    def component_dict(self) -> dict[str, float]:
+        return {name: round(float(getattr(self, name)), 6) for name in REWARD_COMPONENT_NAMES}
+
+    def reward_source_totals(self) -> dict[str, float]:
+        return {
+            "outcome_reward_total": self.outcome_reward_total,
+            "penalty_total": self.penalty_total,
+            "total_reward": round(self.total_reward, 6),
+        }
 
 
 def score_submission(
@@ -110,6 +150,40 @@ def scan_cost_penalty_for(scan_cost: float) -> float:
     if scan_cost < 0.0:
         raise ValueError("scan_cost must be non-negative")
     return -min(SCAN_COST_PENALTY_CAP, SCAN_COST_PENALTY_RATE * scan_cost)
+
+
+def reward_component_dict(
+    reward: RewardBreakdown | Mapping[str, float] | None,
+) -> dict[str, float]:
+    """Return a normalized component dictionary from a breakdown or mapping."""
+
+    if reward is None:
+        return {name: 0.0 for name in REWARD_COMPONENT_NAMES}
+    if isinstance(reward, RewardBreakdown):
+        return reward.component_dict()
+    return {
+        name: round(float(reward.get(name, 0.0)), 6)
+        for name in REWARD_COMPONENT_NAMES
+    }
+
+
+def reward_source_totals(
+    reward: RewardBreakdown | Mapping[str, float] | None,
+) -> dict[str, float]:
+    """Group reward components into outcome and penalty sources."""
+
+    components = reward_component_dict(reward)
+    return {
+        "outcome_reward_total": round(
+            sum(components[name] for name in OUTCOME_COMPONENT_NAMES),
+            6,
+        ),
+        "penalty_total": round(
+            sum(components[name] for name in PENALTY_COMPONENT_NAMES),
+            6,
+        ),
+        "total_reward": round(sum(components.values()), 6),
+    }
 
 
 def _merge_predictions(
