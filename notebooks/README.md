@@ -21,6 +21,12 @@ It runs:
   - continue SFT with `--init-adapter-dir`
   - strict + normalized held-out adapter eval
   - optional publish to `prodigyhuh/atomicvision-medium-fidelity-boost-lora`
+- Track C hard-frontier continuation:
+  - restore `prodigyhuh/atomicvision-medium-fidelity-boost-lora`
+  - build `atomicvision_hard_frontier_boost_sft.jsonl`
+  - continue SFT with `--init-adapter-dir`
+  - strict + normalized held-out adapter eval
+  - optional publish to `prodigyhuh/atomicvision-hard-frontier-boost-lora`
 
 The current best published checkpoint from that notebook flow is
 `prodigyhuh/atomicvision-medium-fidelity-boost-lora`.

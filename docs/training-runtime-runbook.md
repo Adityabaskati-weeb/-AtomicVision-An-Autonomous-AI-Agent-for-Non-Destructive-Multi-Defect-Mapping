@@ -297,13 +297,10 @@ Recommended data generation command:
 
 ```bash
 python training/generate_atomicvision_sft_data.py \
-  --profile cost_aware \
+  --profile hard_frontier_boost \
   --episodes-per-difficulty 256 \
   --seed-start 3000 \
   --difficulties hard \
-  --submit-prior-ratio 0.85 \
-  --reference-ratio 0.10 \
-  --min-scan-improvement 0.15 \
   --max-scan-candidates-per-difficulty 1024 \
   --output-jsonl outputs/sft/atomicvision_hard_frontier_boost_sft.jsonl
 ```

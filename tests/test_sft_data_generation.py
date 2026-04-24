@@ -6,7 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from training.generate_atomicvision_sft_data import build_cost_aware_sft_examples, build_sft_examples
+from training.generate_atomicvision_sft_data import (
+    build_cost_aware_sft_examples,
+    build_hard_frontier_boost_examples,
+    build_sft_examples,
+)
 
 
 def test_submit_prior_examples_copy_prior_exactly() -> None:
@@ -122,6 +126,25 @@ def test_cost_aware_examples_use_cheap_prior_biased_mix() -> None:
             assert [call["name"] for call in assistant_calls] == ["ask_prior"]
 
 
+def test_hard_frontier_boost_examples_use_hard_scan_search() -> None:
+    examples = build_hard_frontier_boost_examples(
+        examples_per_difficulty=10,
+        difficulties=("hard",),
+        max_scan_candidates_per_difficulty=256,
+    )
+
+    counts = _counts_by_type(examples)
+
+    assert len(examples) == 10
+    assert counts == {
+        "ask_prior": 1,
+        "submit_after_reference": 1,
+        "submit_prior": 8,
+    }
+    assert {example["difficulty"] for example in examples} == {"hard"}
+    assert any(example["sample_type"] == "submit_after_reference" for example in examples)
+
+
 def test_sft_generator_cli_writes_scan_improvement_jsonl() -> None:
     output_path = Path(f"outputs/test-sft-generator/atomicvision_scan_sft_{os.getpid()}.jsonl")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -183,6 +206,41 @@ def test_sft_generator_cli_writes_cost_aware_jsonl() -> None:
         "submit_after_reference": 2,
         "submit_prior": 17,
     }
+
+
+def test_sft_generator_cli_writes_hard_frontier_boost_jsonl() -> None:
+    output_path = Path(f"outputs/test-sft-generator/atomicvision_hard_frontier_sft_{os.getpid()}.jsonl")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "training/generate_atomicvision_sft_data.py",
+            "--profile",
+            "hard_frontier_boost",
+            "--episodes-per-difficulty",
+            "10",
+            "--difficulties",
+            "hard",
+            "--max-scan-candidates-per-difficulty",
+            "256",
+            "--output-jsonl",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+    assert "Wrote 10 examples" in completed.stdout
+    assert _counts_by_type(rows) == {
+        "ask_prior": 1,
+        "submit_after_reference": 1,
+        "submit_prior": 8,
+    }
+    assert {row["difficulty"] for row in rows} == {"hard"}
 
 
 def _parse_tool_call(text: str) -> dict:

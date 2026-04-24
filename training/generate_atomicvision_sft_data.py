@@ -44,6 +44,10 @@ FORMAT_REPAIR_SUBMIT_PRIOR_RATIO = 0.40
 FORMAT_REPAIR_REFERENCE_RATIO = 0.10
 SUBMIT_BRIDGE_SUBMIT_PRIOR_RATIO = 0.75
 SUBMIT_BRIDGE_REFERENCE_RATIO = 0.10
+HARD_FRONTIER_SUBMIT_PRIOR_RATIO = 0.85
+HARD_FRONTIER_REFERENCE_RATIO = 0.10
+HARD_FRONTIER_MIN_SCAN_IMPROVEMENT = 0.15
+HARD_FRONTIER_MAX_SCAN_CANDIDATES = 1024
 
 
 def build_sft_examples(
@@ -178,6 +182,28 @@ def build_two_step_curriculum_examples(
         max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
     )
     return [*repair, *bridge]
+
+
+def build_hard_frontier_boost_examples(
+    examples_per_difficulty: int,
+    difficulties: tuple[str, ...] = ("hard",),
+    seed_start: int = 0,
+    submit_prior_ratio: float = HARD_FRONTIER_SUBMIT_PRIOR_RATIO,
+    reference_ratio: float = HARD_FRONTIER_REFERENCE_RATIO,
+    min_scan_improvement: float = HARD_FRONTIER_MIN_SCAN_IMPROVEMENT,
+    max_scan_candidates_per_difficulty: int | None = HARD_FRONTIER_MAX_SCAN_CANDIDATES,
+) -> list[dict[str, Any]]:
+    """Build a hard-focused continuation set with wider reference search."""
+
+    return build_cost_aware_sft_examples(
+        examples_per_difficulty=examples_per_difficulty,
+        difficulties=difficulties,
+        seed_start=seed_start,
+        submit_prior_ratio=submit_prior_ratio,
+        reference_ratio=reference_ratio,
+        min_scan_improvement=min_scan_improvement,
+        max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+    )
 
 
 def build_episode_examples(
@@ -411,7 +437,14 @@ def main() -> None:
     parser.add_argument("--episodes-per-difficulty", type=int, default=256)
     parser.add_argument(
         "--profile",
-        choices=("explicit", "cost_aware", "format_repair", "submit_bridge", "two_step_curriculum"),
+        choices=(
+            "explicit",
+            "cost_aware",
+            "format_repair",
+            "submit_bridge",
+            "two_step_curriculum",
+            "hard_frontier_boost",
+        ),
         default="explicit",
         help=(
             "explicit uses --sample-types as-is. cost_aware creates a "
@@ -419,7 +452,9 @@ def main() -> None:
             "format_repair creates a held-out repair mix with many more "
             "first-step ask_prior rows. submit_bridge strengthens the "
             "second-turn submit_defect_map schema. two_step_curriculum "
-            "concatenates both phases into one reproducible dataset."
+            "concatenates both phases into one reproducible dataset. "
+            "hard_frontier_boost widens the scan-improvement search for hard "
+            "continuation runs."
         ),
     )
     parser.add_argument("--seed-start", type=int, default=0)
@@ -509,6 +544,28 @@ def main() -> None:
             seed_start=args.seed_start,
             min_scan_improvement=args.min_scan_improvement,
             max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+        )
+    elif args.profile == "hard_frontier_boost":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        min_scan_improvement = args.min_scan_improvement
+        max_scan_candidates_per_difficulty = args.max_scan_candidates_per_difficulty
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = HARD_FRONTIER_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = HARD_FRONTIER_REFERENCE_RATIO
+        if min_scan_improvement == 0.25:
+            min_scan_improvement = HARD_FRONTIER_MIN_SCAN_IMPROVEMENT
+        if max_scan_candidates_per_difficulty is None:
+            max_scan_candidates_per_difficulty = HARD_FRONTIER_MAX_SCAN_CANDIDATES
+        examples = build_hard_frontier_boost_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            submit_prior_ratio=submit_prior_ratio,
+            reference_ratio=reference_ratio,
+            min_scan_improvement=min_scan_improvement,
+            max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
         )
     else:
         examples = build_sft_examples(
