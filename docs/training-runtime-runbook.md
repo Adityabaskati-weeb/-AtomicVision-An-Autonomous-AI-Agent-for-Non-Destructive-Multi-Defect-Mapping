@@ -272,6 +272,63 @@ This follows the reward-engineering papers more closely:
 - do not over-correct with broad reward or format changes once strict execution
   already works.
 
+This medium-only boost now exists as a published checkpoint:
+
+- [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
+
+Held-out result:
+
+- medium baseline `4.5115` -> boost `4.5707`
+- hard baseline `4.8883` -> boost `4.6466`
+- strict tool-call pass rate `1.00`
+- normalized tool-call pass rate `1.00`
+
+So the medium intervention worked, but it did not move the hard frontier.
+That matches the dataset mix: the boost run found only a handful of
+`submit_after_reference` rows and therefore mostly strengthened prior fidelity
+instead of harder reference-improvable cases.
+
+## Next Hard-Frontier Booster
+
+The next careful pass should continue from the promoted boost adapter and widen
+the scan-improvement search on `hard` only.
+
+Recommended data generation command:
+
+```bash
+python training/generate_atomicvision_sft_data.py \
+  --profile cost_aware \
+  --episodes-per-difficulty 256 \
+  --seed-start 3000 \
+  --difficulties hard \
+  --submit-prior-ratio 0.85 \
+  --reference-ratio 0.10 \
+  --min-scan-improvement 0.15 \
+  --max-scan-candidates-per-difficulty 1024 \
+  --output-jsonl outputs/sft/atomicvision_hard_frontier_boost_sft.jsonl
+```
+
+Recommended continuation command:
+
+```bash
+python training/train_sft_atomicvision_safe.py \
+  --dataset-jsonl outputs/sft/atomicvision_hard_frontier_boost_sft.jsonl \
+  --model Qwen/Qwen3-1.7B \
+  --init-adapter-dir /kaggle/working/atomicvision-medium-fidelity-boost-lora \
+  --output-dir /kaggle/working/atomicvision-hard-frontier-boost-lora \
+  --max-updates 12 \
+  --grad-accum 8 \
+  --batch-size 1 \
+  --max-length 1536 \
+  --learning-rate 5e-6 \
+  --max-grad-norm 1.0 \
+  --checkpoint-steps 6 12 \
+  --overwrite-output-dir
+```
+
+This keeps the new medium win while concentrating fresh capacity on the
+remaining hard slice instead of reopening the already-solved formatting path.
+
 ```bash
 python training/evaluate_atomicvision_adapter.py \
   --adapter-dir /kaggle/working/atomicvision-format-submit-merged-lora \

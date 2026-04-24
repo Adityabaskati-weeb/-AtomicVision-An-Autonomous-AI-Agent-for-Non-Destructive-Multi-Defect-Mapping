@@ -11,6 +11,8 @@ actions, and submits a final defect map under scan-budget pressure.
 - NaN-safe SFT trainer: [training/train_sft_atomicvision_safe.py](../training/train_sft_atomicvision_safe.py)
 - Held-out evaluator: [training/evaluate_atomicvision_adapter.py](../training/evaluate_atomicvision_adapter.py)
 - Adapter publisher: [training/publish_adapter_to_hub.py](../training/publish_adapter_to_hub.py)
+- Current best adapter: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
+- Stable fallback adapter: [prodigyhuh/atomicvision-format-submit-merged-lora](https://huggingface.co/prodigyhuh/atomicvision-format-submit-merged-lora)
 
 ## Why this project fits the hackathon
 
@@ -37,6 +39,25 @@ That led to the current recovery path:
 2. schema-aware two-step curriculum,
 3. strict plus normalized held-out evaluation,
 4. only then GRPO continuation.
+
+## Current Best Result
+
+The current best published checkpoint is the medium-fidelity boost adapter:
+
+- model repo: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
+- training style: small continuation SFT from the saved reliable adapter
+- goal: improve outcome quality without disturbing perfect tool-call execution
+
+Held-out result summary:
+
+| Difficulty | Baseline reward | Boost reward | Strict pass | Done rate |
+| --- | ---: | ---: | ---: | ---: |
+| medium | 4.5115 | 4.5707 | 1.00 | 1.00 |
+| hard | 4.8883 | 4.6466 | 1.00 | 1.00 |
+
+That is the important shape of progress for this project: the interface layer
+is now reliable, the medium slice improved, and the remaining gap is hard-case
+quality rather than formatting.
 
 ## Evidence
 

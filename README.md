@@ -24,6 +24,8 @@ accuracy against scan cost.
 - Theme fit: `Theme #3.1 - World Modeling / Professional Tasks`
 - Hugging Face Space: [prodigyhuh/atomicvision-openenv](https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv)
 - Public app host: [prodigyhuh-atomicvision-openenv.hf.space](https://prodigyhuh-atomicvision-openenv.hf.space)
+- Best held-out adapter: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
+- Stable fallback adapter: [prodigyhuh/atomicvision-format-submit-merged-lora](https://huggingface.co/prodigyhuh/atomicvision-format-submit-merged-lora)
 - Judge repro notebook: [notebooks/AtomicVision_Judge_Repro_Colab.ipynb](notebooks/AtomicVision_Judge_Repro_Colab.ipynb) - full rebuild plus saved-adapter continuation
 - Open in Colab: [AtomicVision Judge Repro Colab](https://colab.research.google.com/github/Adityabaskati-weeb/-AtomicVision-An-Autonomous-AI-Agent-for-Non-Destructive-Multi-Defect-Mapping/blob/main/notebooks/AtomicVision_Judge_Repro_Colab.ipynb)
 - Training script: [training/train_sft_atomicvision_safe.py](training/train_sft_atomicvision_safe.py)
@@ -107,9 +109,9 @@ Current status:
 
 - Stable environment: yes
 - Stable NaN-safe SFT path: yes
-- Held-out strict tool-call gate: blocked
-- Official normalized held-out eval path: implemented
-- GRPO readiness: not yet
+- Held-out strict tool-call gate: pass
+- Official normalized held-out eval path: healthy
+- GRPO readiness: not yet; hard cases still trail the baseline
 
 The project now tracks both:
 
@@ -121,6 +123,23 @@ This split makes it much easier to tell whether a failure is:
 - policy quality
 - tool-call formatting
 - or a reward / execution mismatch
+
+## Current Best Held-Out Checkpoint
+
+The current best published checkpoint is
+[prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora).
+It preserves perfect strict and normalized verifier columns, improves the
+medium held-out reward above the prior-submit baseline, and keeps the hard
+slice unchanged relative to the previous stable adapter.
+
+| Adapter | Medium reward | Hard reward | Strict pass | Done rate | Notes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Prior-submit baseline | 4.5115 | 4.8883 | 1.00 | 1.00 | Reference policy |
+| `atomicvision-format-submit-merged-lora` | 4.3812 | 4.6466 | 1.00 | 1.00 | Stable recovery adapter |
+| `atomicvision-medium-fidelity-boost-lora` | 4.5707 | 4.6466 | 1.00 | 1.00 | Current best checkpoint |
+
+The remaining gap is now concentrated in hard frontier quality, not formatting
+or tool-call execution.
 
 ## Best Demo Result
 

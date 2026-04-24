@@ -22,6 +22,9 @@ It runs:
   - strict + normalized held-out adapter eval
   - optional publish to `prodigyhuh/atomicvision-medium-fidelity-boost-lora`
 
+The current best published checkpoint from that notebook flow is
+`prodigyhuh/atomicvision-medium-fidelity-boost-lora`.
+
 ## AtomicVision_GRPO_Colab.ipynb
 
 Phase 10 bridge notebook plus Phase 11 GRPO launch notes for the deployed OpenEnv Space.
