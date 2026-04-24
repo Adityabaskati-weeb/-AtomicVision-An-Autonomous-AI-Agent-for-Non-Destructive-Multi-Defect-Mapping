@@ -15,7 +15,8 @@ def test_judge_colab_notebook_exists_and_targets_repro_flow() -> None:
 
     assert payload["nbformat"] == 4
     assert "AtomicVision Judge Repro Colab" in source_text
-    assert "codex-reward-engineering-hardening" in source_text
+    assert 'BRANCH = "main"' in source_text
+    assert "/blob/main/notebooks/AtomicVision_Judge_Repro_Colab.ipynb" in source_text
     assert "two_step_curriculum" in source_text
     assert "train_sft_atomicvision_safe.py" in source_text
     assert "publish_adapter_to_hub.py" in source_text

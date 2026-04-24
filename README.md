@@ -25,7 +25,7 @@ accuracy against scan cost.
 - Hugging Face Space: [prodigyhuh/atomicvision-openenv](https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv)
 - Public app host: [prodigyhuh-atomicvision-openenv.hf.space](https://prodigyhuh-atomicvision-openenv.hf.space)
 - Judge repro notebook: [notebooks/AtomicVision_Judge_Repro_Colab.ipynb](notebooks/AtomicVision_Judge_Repro_Colab.ipynb)
-- Open in Colab: [AtomicVision Judge Repro Colab](https://colab.research.google.com/github/Adityabaskati-weeb/-AtomicVision-An-Autonomous-AI-Agent-for-Non-Destructive-Multi-Defect-Mapping/blob/codex-reward-engineering-hardening/notebooks/AtomicVision_Judge_Repro_Colab.ipynb)
+- Open in Colab: [AtomicVision Judge Repro Colab](https://colab.research.google.com/github/Adityabaskati-weeb/-AtomicVision-An-Autonomous-AI-Agent-for-Non-Destructive-Multi-Defect-Mapping/blob/main/notebooks/AtomicVision_Judge_Repro_Colab.ipynb)
 - Training script: [training/train_sft_atomicvision_safe.py](training/train_sft_atomicvision_safe.py)
 - Writeup: [docs/judge-writeup.md](docs/judge-writeup.md)
 - Legacy GRPO bridge: [notebooks/AtomicVision_GRPO_Colab.ipynb](notebooks/AtomicVision_GRPO_Colab.ipynb)
