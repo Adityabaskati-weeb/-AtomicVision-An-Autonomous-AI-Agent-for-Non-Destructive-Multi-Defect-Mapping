@@ -502,7 +502,7 @@ def reward_func(environments, **kwargs) -> list[float]:
         copy_reward = _prior_copy_reward(env)
         component_values = reward_component_dict(getattr(env, "last_reward_breakdown", None))
         source_totals = reward_source_totals(getattr(env, "last_reward_breakdown", None))
-        strict_call = parse_strict_tool_call(completion_text)
+        strict_call = parse_last_strict_tool_call(completion_text)
         repaired_call = repair_tool_call(completion_text)
         env_rewards.append(env_reward)
         format_rewards.append(format_reward)
@@ -1005,19 +1005,38 @@ def render_tool_call_text(call: dict[str, Any]) -> str:
     return f"<tool_call>{payload}</tool_call>"
 
 
+def _parse_all_strict_tool_calls(text: str) -> list[dict[str, Any]]:
+    """Parse every strictly valid XML-wrapped JSON tool call in a transcript."""
+
+    matches = re.findall(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", text, re.S)
+    calls: list[dict[str, Any]] = []
+    for match in matches:
+        try:
+            call = json.loads(match)
+        except json.JSONDecodeError:
+            return []
+        if not _is_valid_tool_call(call):
+            return []
+        calls.append(call)
+    return calls
+
+
 def parse_strict_tool_call(text: str) -> dict[str, Any] | None:
     """Parse one exact XML-wrapped JSON tool call, returning None on any mismatch."""
 
-    matches = re.findall(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", text, re.S)
-    if len(matches) != 1:
+    calls = _parse_all_strict_tool_calls(text)
+    if len(calls) != 1:
         return None
-    try:
-        call = json.loads(matches[0])
-    except json.JSONDecodeError:
+    return calls[0]
+
+
+def parse_last_strict_tool_call(text: str) -> dict[str, Any] | None:
+    """Return the last strict tool call in a multi-turn transcript, if any."""
+
+    calls = _parse_all_strict_tool_calls(text)
+    if not calls:
         return None
-    if not _is_valid_tool_call(call):
-        return None
-    return call
+    return calls[-1]
 
 
 def repair_tool_call(text: str) -> dict[str, Any] | None:
@@ -1026,6 +1045,10 @@ def repair_tool_call(text: str) -> dict[str, Any] | None:
     strict = parse_strict_tool_call(text)
     if strict is not None:
         return strict
+
+    terminal_strict = parse_last_strict_tool_call(text)
+    if terminal_strict is not None:
+        return terminal_strict
 
     tool_name = _first_tool_name(text)
     if tool_name is None:
@@ -1054,7 +1077,7 @@ def canonicalize_tool_call_text(text: str) -> str:
 def _tool_call_format_reward(text: str) -> float:
     if not text:
         return 0.0
-    if parse_strict_tool_call(text) is None:
+    if parse_last_strict_tool_call(text) is None:
         return -INVALID_TOOL_CALL_FORMAT_PENALTY
     return VALID_TOOL_CALL_FORMAT_REWARD
 

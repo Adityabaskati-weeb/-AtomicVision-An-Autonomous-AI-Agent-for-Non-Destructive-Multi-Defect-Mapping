@@ -13,6 +13,7 @@ from training.train_grpo_atomicvision import (
     CONFIDENT_PRIOR_MIS_COPY_PENALTY,
     EXACT_PRIOR_COPY_REWARD,
     parse_strict_tool_call,
+    parse_last_strict_tool_call,
     repair_tool_call,
     TRAINING_PRESETS,
     VALID_TOOL_CALL_FORMAT_REWARD,
@@ -190,8 +191,55 @@ def test_repair_tool_call_recovers_submit_from_defect_map_payload() -> None:
     }
 
 
+def test_episode_transcript_uses_last_strict_tool_call() -> None:
+    transcript = "\n".join(
+        [
+            '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call>',
+            "user",
+            "<tool_response>reward=None done=False</tool_response>",
+            "assistant",
+            (
+                '<tool_call>{"name":"submit_defect_map","arguments":'
+                '{"predicted_defects":["Zn"],'
+                '"predicted_concentrations":[0.19],'
+                '"confidence":0.65}}</tool_call>'
+            ),
+        ]
+    )
+
+    assert parse_strict_tool_call(transcript) is None
+    assert parse_last_strict_tool_call(transcript) == {
+        "name": "submit_defect_map",
+        "arguments": {
+            "predicted_defects": ["Zn"],
+            "predicted_concentrations": [0.19],
+            "confidence": 0.65,
+        },
+    }
+    assert repair_tool_call(transcript) == parse_last_strict_tool_call(transcript)
+
+
 def test_parse_strict_tool_call_rejects_shorthand_repairable_text() -> None:
     assert parse_strict_tool_call("<tool_call> ask_prior") is None
+
+
+def test_tool_call_format_reward_accepts_multi_turn_strict_transcript() -> None:
+    transcript = "\n".join(
+        [
+            '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call>',
+            "user",
+            "<tool_response>reward=None done=False</tool_response>",
+            "assistant",
+            (
+                '<tool_call>{"name":"submit_defect_map","arguments":'
+                '{"predicted_defects":["Zn"],'
+                '"predicted_concentrations":[0.19],'
+                '"confidence":0.65}}</tool_call>'
+            ),
+        ]
+    )
+
+    assert _tool_call_format_reward(transcript) == VALID_TOOL_CALL_FORMAT_REWARD
 
 
 def test_training_presets_keep_grpo_generation_batch_valid() -> None:
