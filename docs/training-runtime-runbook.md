@@ -218,6 +218,60 @@ Why a model repo instead of a Space:
 Before any GRPO continuation, run the official held-out evaluator in both
 strict and normalized modes:
 
+## Targeted Post-Recovery Booster
+
+Once strict tool reliability is fixed, do not restart from the base model just
+to chase a small held-out reward gap. Continue from the saved good adapter and
+target the remaining quality pocket directly.
+
+For AtomicVision, the current remaining gap is mostly medium-difficulty outcome
+quality. A conservative next pass is:
+
+1. build a medium-only cheap-prior dataset with a very high `submit_prior`
+   ratio,
+2. continue SFT from the saved reliable adapter,
+3. keep the learning rate small,
+4. re-run held-out eval immediately.
+
+Example:
+
+```bash
+python training/generate_atomicvision_sft_data.py \
+  --profile cost_aware \
+  --episodes-per-difficulty 256 \
+  --seed-start 2000 \
+  --difficulties medium \
+  --submit-prior-ratio 0.95 \
+  --reference-ratio 0.02 \
+  --min-scan-improvement 0.25 \
+  --output-jsonl outputs/sft/atomicvision_medium_prior_fidelity_sft.jsonl
+```
+
+Then continue from the saved adapter instead of from the base model:
+
+```bash
+python training/train_sft_atomicvision_safe.py \
+  --dataset-jsonl outputs/sft/atomicvision_medium_prior_fidelity_sft.jsonl \
+  --model Qwen/Qwen3-1.7B \
+  --init-adapter-dir /kaggle/working/atomicvision-format-submit-merged-lora \
+  --output-dir /kaggle/working/atomicvision-medium-fidelity-boost-lora \
+  --max-updates 12 \
+  --grad-accum 8 \
+  --batch-size 1 \
+  --max-length 1536 \
+  --learning-rate 5e-6 \
+  --max-grad-norm 1.0 \
+  --checkpoint-steps 6 12 \
+  --overwrite-output-dir
+```
+
+This follows the reward-engineering papers more closely:
+
+- keep the good process policy,
+- target the remaining outcome gap,
+- do not over-correct with broad reward or format changes once strict execution
+  already works.
+
 ```bash
 python training/evaluate_atomicvision_adapter.py \
   --adapter-dir /kaggle/working/atomicvision-format-submit-merged-lora \

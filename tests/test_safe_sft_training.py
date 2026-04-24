@@ -6,6 +6,7 @@ import pytest
 
 from training.train_sft_atomicvision_safe import (
     assert_finite_number,
+    parse_args,
     parse_tool_call_text,
     render_chat_prompt_with_disabled_thinking,
     summarize_masked_examples,
@@ -152,3 +153,18 @@ def test_assert_finite_number_rejects_nan_and_inf():
         assert_finite_number(math.inf, "grad_norm")
 
     assert_finite_number(1.25, "loss")
+
+
+def test_parse_args_accepts_init_adapter_dir(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "train_sft_atomicvision_safe.py",
+            "--init-adapter-dir",
+            "/tmp/atomicvision-adapter",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.init_adapter_dir == "/tmp/atomicvision-adapter"

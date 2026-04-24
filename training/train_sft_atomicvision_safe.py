@@ -294,7 +294,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     print(json.dumps(row_stats.__dict__, indent=2, sort_keys=True))
 
     import torch
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
     from torch.nn.utils import clip_grad_norm_
     from torch.utils.data import DataLoader, Dataset
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -334,15 +334,22 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     )
     model.config.use_cache = False
     model = prepare_model_for_kbit_training(model)
-    peft_config = LoraConfig(
-        r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-        bias="none",
-        task_type="CAUSAL_LM",
-        target_modules=list(args.target_modules),
-    )
-    model = get_peft_model(model, peft_config)
+    init_adapter_dir = None
+    if args.init_adapter_dir:
+        init_adapter_dir = Path(args.init_adapter_dir).resolve()
+        if not init_adapter_dir.exists():
+            raise FileNotFoundError(f"Initial adapter directory not found: {init_adapter_dir}")
+        model = PeftModel.from_pretrained(model, str(init_adapter_dir), is_trainable=True)
+    else:
+        peft_config = LoraConfig(
+            r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            bias="none",
+            task_type="CAUSAL_LM",
+            target_modules=list(args.target_modules),
+        )
+        model = get_peft_model(model, peft_config)
     model.train()
     model.print_trainable_parameters()
 
@@ -433,6 +440,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         "lora_r": args.lora_r,
         "lora_alpha": args.lora_alpha,
         "lora_dropout": args.lora_dropout,
+        "init_adapter_dir": str(init_adapter_dir) if init_adapter_dir else None,
         "row_stats": row_stats.__dict__,
         "mask_stats": mask_stats.__dict__,
         "final_mean_loss": sum(last_losses[-args.grad_accum :]) / args.grad_accum,
@@ -521,6 +529,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument(
+        "--init-adapter-dir",
+        default=None,
+        help="Optional existing PEFT adapter directory to continue training from.",
+    )
     parser.add_argument("--target-modules", nargs="+", default=list(DEFAULT_TARGET_MODULES))
     parser.add_argument("--checkpoint-steps", nargs="+", type=int, default=[40, 60, 80])
     parser.add_argument("--log-every", type=int, default=10)
