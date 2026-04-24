@@ -8,12 +8,19 @@ It runs:
 
 - branch clone from GitHub
 - dependency installation
-- `two_step_curriculum` SFT dataset generation
-- NaN-safe SFT validation
-- 5-update sanity train
-- 40-update rebuild
-- optional `publish_adapter_to_hub.py`
-- strict + normalized held-out adapter eval
+- Track A full rebuild:
+  - `two_step_curriculum` SFT dataset generation
+  - NaN-safe SFT validation
+  - 5-update sanity train
+  - 40-update rebuild
+  - optional `publish_adapter_to_hub.py`
+  - strict + normalized held-out adapter eval
+- Track B targeted continuation:
+  - restore `prodigyhuh/atomicvision-format-submit-merged-lora`
+  - build `atomicvision_medium_prior_fidelity_sft.jsonl`
+  - continue SFT with `--init-adapter-dir`
+  - strict + normalized held-out adapter eval
+  - optional publish to `prodigyhuh/atomicvision-medium-fidelity-boost-lora`
 
 ## AtomicVision_GRPO_Colab.ipynb
 

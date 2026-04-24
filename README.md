@@ -24,7 +24,7 @@ accuracy against scan cost.
 - Theme fit: `Theme #3.1 - World Modeling / Professional Tasks`
 - Hugging Face Space: [prodigyhuh/atomicvision-openenv](https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv)
 - Public app host: [prodigyhuh-atomicvision-openenv.hf.space](https://prodigyhuh-atomicvision-openenv.hf.space)
-- Judge repro notebook: [notebooks/AtomicVision_Judge_Repro_Colab.ipynb](notebooks/AtomicVision_Judge_Repro_Colab.ipynb)
+- Judge repro notebook: [notebooks/AtomicVision_Judge_Repro_Colab.ipynb](notebooks/AtomicVision_Judge_Repro_Colab.ipynb) - full rebuild plus saved-adapter continuation
 - Open in Colab: [AtomicVision Judge Repro Colab](https://colab.research.google.com/github/Adityabaskati-weeb/-AtomicVision-An-Autonomous-AI-Agent-for-Non-Destructive-Multi-Defect-Mapping/blob/main/notebooks/AtomicVision_Judge_Repro_Colab.ipynb)
 - Training script: [training/train_sft_atomicvision_safe.py](training/train_sft_atomicvision_safe.py)
 - Writeup: [docs/judge-writeup.md](docs/judge-writeup.md)
