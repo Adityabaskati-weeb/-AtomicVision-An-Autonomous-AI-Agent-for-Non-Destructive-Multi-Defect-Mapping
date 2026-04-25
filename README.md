@@ -33,8 +33,10 @@ accuracy against scan cost.
 - Legacy GRPO bridge: [notebooks/AtomicVision_GRPO_Colab.ipynb](notebooks/AtomicVision_GRPO_Colab.ipynb)
 - Deployment notes: [docs/phase-9-huggingface-deployment.md](docs/phase-9-huggingface-deployment.md)
 - Runtime runbook: [docs/training-runtime-runbook.md](docs/training-runtime-runbook.md)
+- HF Jobs training playbook: [docs/hf-jobs-training-playbook.md](docs/hf-jobs-training-playbook.md)
 - Training data architecture: [docs/training-data-architecture.md](docs/training-data-architecture.md)
 - Model training roadmap: [docs/model-training-generalization-roadmap.md](docs/model-training-generalization-roadmap.md)
+- Experiment lineage: [docs/experiment-lineage.md](docs/experiment-lineage.md)
 - Submission checklist: [docs/hackathon-submission-checklist.md](docs/hackathon-submission-checklist.md)
 - Mini-blog draft: [docs/hackathon-mini-blog-draft.md](docs/hackathon-mini-blog-draft.md)
 
@@ -74,9 +76,10 @@ previous gate has been validated.
 - Phase 14: Held-Out Evaluation And GRPO Roadmap
 - Phase 15: NaN-Safe SFT Recovery
 - Phase 16: Format-Repair And Two-Step Curriculum
-- Status: Cost-aware assistant-masked SFT checkpoint-40 is the best promoted
-  checkpoint only for finite-loss runs; any new Kaggle SFT run with `loss nan`
-  must be discarded and rerun through the NaN-safe SFT trainer before GRPO
+- Status: the current best promoted adapter is
+  `atomicvision-medium-fidelity-boost-lora`; the stable fallback is
+  `atomicvision-format-submit-merged-lora`; held-out evaluation now uses the
+  official eval-only seed band before any new promotion decision
 - Scope document: [docs/phase-0-scope-lock.md](docs/phase-0-scope-lock.md)
 - System design: [docs/phase-1-system-design.md](docs/phase-1-system-design.md)
 - Environment contract: [docs/phase-2-environment-contract.md](docs/phase-2-environment-contract.md)
@@ -91,8 +94,10 @@ previous gate has been validated.
 - Phase 11 notes: [docs/phase-11-finetuning-plan.md](docs/phase-11-finetuning-plan.md)
 - Lecture 91 method notes: [docs/lecture-91-openenv-method-notes.md](docs/lecture-91-openenv-method-notes.md)
 - Training runbook: [docs/training-runtime-runbook.md](docs/training-runtime-runbook.md)
+- HF Jobs training playbook: [docs/hf-jobs-training-playbook.md](docs/hf-jobs-training-playbook.md)
 - Training data architecture: [docs/training-data-architecture.md](docs/training-data-architecture.md)
 - Model training roadmap: [docs/model-training-generalization-roadmap.md](docs/model-training-generalization-roadmap.md)
+- Experiment lineage: [docs/experiment-lineage.md](docs/experiment-lineage.md)
 - Held-out + GRPO roadmap: [docs/phase-14-heldout-grpo-roadmap.md](docs/phase-14-heldout-grpo-roadmap.md)
 - NaN-safe SFT recovery: [docs/phase-15-nan-safe-sft-recovery.md](docs/phase-15-nan-safe-sft-recovery.md)
 - Format-repair SFT: [docs/phase-16-format-repair-sft.md](docs/phase-16-format-repair-sft.md)
@@ -144,6 +149,16 @@ slice unchanged relative to the previous stable adapter.
 
 The remaining gap is now concentrated in hard frontier quality, not formatting
 or tool-call execution.
+
+## Official Seed Policy
+
+AtomicVision now uses one permanent seed split:
+
+- SFT data generation: `1000-3999`
+- GRPO prompt selection: `4000-7999`
+- held-out evaluation only: `10000-10999`
+
+Promotion claims should use the held-out eval band only.
 
 ## Best Demo Result
 

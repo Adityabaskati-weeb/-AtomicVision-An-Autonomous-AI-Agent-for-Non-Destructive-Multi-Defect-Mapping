@@ -59,6 +59,31 @@ That is the important shape of progress for this project: the interface layer
 is now reliable, the medium slice improved, and the remaining gap is hard-case
 quality rather than formatting.
 
+## Held-Out Seed Policy
+
+AtomicVision now uses a permanent seed split:
+
+- SFT data generation: `1000-3999`
+- GRPO prompt selection: `4000-7999`
+- held-out evaluation only: `10000-10999`
+
+This keeps promotion claims tied to unseen evaluation seeds rather than
+overlapping rebuild data.
+
+## Public Data Strategy
+
+Public materials datasets are useful for AtomicVision, but not as raw policy
+training rows.
+
+They are used upstream for:
+
+- prior improvement,
+- reference retrieval,
+- and simulator calibration.
+
+Policy SFT and GRPO stay AtomicVision-native: chat messages, tool calls, and
+environment-grounded rewards.
+
 ## Evidence
 
 The repository now includes validator-facing training evidence as committed PNG
