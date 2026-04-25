@@ -45,6 +45,8 @@ FORMAT_REPAIR_SUBMIT_PRIOR_RATIO = 0.40
 FORMAT_REPAIR_REFERENCE_RATIO = 0.10
 SUBMIT_BRIDGE_SUBMIT_PRIOR_RATIO = 0.75
 SUBMIT_BRIDGE_REFERENCE_RATIO = 0.10
+FORMAT_REFRESH_SUBMIT_PRIOR_RATIO = 0.90
+FORMAT_REFRESH_REFERENCE_RATIO = 0.0
 HARD_FRONTIER_SUBMIT_PRIOR_RATIO = 0.85
 HARD_FRONTIER_REFERENCE_RATIO = 0.10
 HARD_FRONTIER_MIN_SCAN_IMPROVEMENT = 0.15
@@ -195,6 +197,33 @@ def build_hard_frontier_boost_examples(
     max_scan_candidates_per_difficulty: int | None = HARD_FRONTIER_MAX_SCAN_CANDIDATES,
 ) -> list[dict[str, Any]]:
     """Build a hard-focused continuation set with wider reference search."""
+
+    return build_cost_aware_sft_examples(
+        examples_per_difficulty=examples_per_difficulty,
+        difficulties=difficulties,
+        seed_start=seed_start,
+        submit_prior_ratio=submit_prior_ratio,
+        reference_ratio=reference_ratio,
+        min_scan_improvement=min_scan_improvement,
+        max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+    )
+
+
+def build_format_refresh_examples(
+    examples_per_difficulty: int,
+    difficulties: tuple[str, ...] = ("hard",),
+    seed_start: int = 0,
+    submit_prior_ratio: float = FORMAT_REFRESH_SUBMIT_PRIOR_RATIO,
+    reference_ratio: float = FORMAT_REFRESH_REFERENCE_RATIO,
+    min_scan_improvement: float = 0.25,
+    max_scan_candidates_per_difficulty: int | None = None,
+) -> list[dict[str, Any]]:
+    """Build a tiny strict-envelope refresh set before hard-only GRPO.
+
+    This profile is intentionally dominated by exact ask_prior -> submit_defect_map
+    rows so a small continuation can refresh the XML-wrapped tool-call contract
+    without spending many updates relearning broader behavior.
+    """
 
     return build_cost_aware_sft_examples(
         examples_per_difficulty=examples_per_difficulty,
@@ -442,6 +471,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "explicit",
             "cost_aware",
             "format_repair",
+            "format_refresh",
             "submit_bridge",
             "two_step_curriculum",
             "hard_frontier_boost",
@@ -451,7 +481,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "explicit uses --sample-types as-is. cost_aware creates a "
             "cheap-prior-biased mix for assistant-masked SFT. "
             "format_repair creates a held-out repair mix with many more "
-            "first-step ask_prior rows. submit_bridge strengthens the "
+            "first-step ask_prior rows. format_refresh creates a tiny "
+            "submit-heavy strict-envelope refresh set before GRPO. "
+            "submit_bridge strengthens the "
             "second-turn submit_defect_map schema. two_step_curriculum "
             "concatenates both phases into one reproducible dataset. "
             "hard_frontier_boost widens the scan-improvement search for hard "
@@ -534,6 +566,22 @@ def main() -> None:
         if reference_ratio == COST_AWARE_REFERENCE_RATIO:
             reference_ratio = SUBMIT_BRIDGE_REFERENCE_RATIO
         examples = build_cost_aware_sft_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            submit_prior_ratio=submit_prior_ratio,
+            reference_ratio=reference_ratio,
+            min_scan_improvement=args.min_scan_improvement,
+            max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+        )
+    elif args.profile == "format_refresh":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = FORMAT_REFRESH_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = FORMAT_REFRESH_REFERENCE_RATIO
+        examples = build_format_refresh_examples(
             examples_per_difficulty=args.episodes_per_difficulty,
             difficulties=tuple(args.difficulties),
             seed_start=args.seed_start,
