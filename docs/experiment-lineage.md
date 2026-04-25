@@ -12,6 +12,7 @@ were trying to fix, and which one is currently the best base for future work.
 | Hard-frontier SFT experiment | [prodigyhuh/atomicvision-hard-frontier-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-frontier-boost-lora) | Not promoted | Stayed reliable but did not improve the hard slice |
 | Hard-only GRPO probe | `atomicvision-hard-only-grpo-reference-probe` | Completed, not promoted | Produced real reward variance but still failed strict submit behavior |
 | Replay-mix SFT continuation | `replay-mix-sft-continuation` | Completed, not promoted | Preserved perfect execution but did not beat the current best on held-out hard quality |
+| Hard error mining diagnostic | `hard-error-mining` | Completed, informative | Showed that hard regressions are dominated by missed defects after `ask_prior -> submit` |
 
 ## What Each Stage Solved
 
@@ -98,6 +99,24 @@ Primary artifacts:
 
 - [replay-mix-sft-continuation-results.md](replay-mix-sft-continuation-results.md)
 - [replay-mix-sft-continuation-metrics.json](replay-mix-sft-continuation-metrics.json)
+
+### 6. Hard error mining
+
+Goal:
+
+- identify the real scientific error mode on held-out hard seeds
+- separate hard semantic misses from formatting or execution failures
+
+Result:
+
+- the main remaining weakness is missed defects
+- the dominant action path is still `ask_prior -> submit_defect_map`
+- this points to a hard-recall bottleneck, not a verifier or XML bottleneck
+
+Primary artifacts:
+
+- [hard-error-mining-results.md](hard-error-mining-results.md)
+- [hard-error-mining-metrics.json](hard-error-mining-metrics.json)
 
 ## Promotion Rule
 
