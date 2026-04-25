@@ -1080,6 +1080,7 @@ def render_tool_call_text(call: dict[str, Any]) -> str:
 def _parse_all_strict_tool_calls_with_spans(text: str) -> list[tuple[dict[str, Any], int, int]]:
     """Parse every strictly valid XML-wrapped JSON tool call in a transcript."""
 
+    text = _normalize_completion_for_tool_parsing(text)
     calls: list[tuple[dict[str, Any], int, int]] = []
     for match in re.finditer(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", text, re.S):
         try:
@@ -1099,6 +1100,7 @@ def _parse_all_strict_tool_calls(text: str) -> list[dict[str, Any]]:
 def parse_terminal_strict_tool_call(text: str) -> dict[str, Any] | None:
     """Return the last strict tool call only when it is the terminal tool mention."""
 
+    text = _normalize_completion_for_tool_parsing(text)
     calls = _parse_all_strict_tool_calls_with_spans(text)
     if not calls:
         return None
@@ -1114,6 +1116,7 @@ def parse_terminal_strict_tool_call(text: str) -> dict[str, Any] | None:
 def parse_strict_tool_call(text: str) -> dict[str, Any] | None:
     """Parse one exact XML-wrapped JSON tool call, returning None on any mismatch."""
 
+    text = _normalize_completion_for_tool_parsing(text)
     calls = _parse_all_strict_tool_calls(text)
     if len(calls) != 1:
         return None
@@ -1123,6 +1126,7 @@ def parse_strict_tool_call(text: str) -> dict[str, Any] | None:
 def parse_last_strict_tool_call(text: str) -> dict[str, Any] | None:
     """Return the last strict tool call in a multi-turn transcript, if any."""
 
+    text = _normalize_completion_for_tool_parsing(text)
     calls = _parse_all_strict_tool_calls(text)
     if not calls:
         return None
@@ -1132,6 +1136,7 @@ def parse_last_strict_tool_call(text: str) -> dict[str, Any] | None:
 def repair_tool_call(text: str) -> dict[str, Any] | None:
     """Recover a valid tool call from near-miss generations when possible."""
 
+    text = _normalize_completion_for_tool_parsing(text)
     terminal_strict = parse_terminal_strict_tool_call(text)
     if terminal_strict is not None:
         return terminal_strict
@@ -1156,11 +1161,12 @@ def canonicalize_tool_call_text(text: str) -> str:
 
     call = repair_tool_call(text)
     if call is None:
-        return text
+        return _normalize_completion_for_tool_parsing(text)
     return render_tool_call_text(call)
 
 
 def _tool_call_format_reward(text: str) -> float:
+    text = _normalize_completion_for_tool_parsing(text)
     if not text:
         return 0.0
     if parse_terminal_strict_tool_call(text) is not None:
@@ -1176,6 +1182,25 @@ def _is_valid_tool_call(call: Any) -> bool:
     name = call.get("name")
     arguments = call.get("arguments")
     return isinstance(name, str) and name in VALID_TOOL_NAMES and isinstance(arguments, dict)
+
+
+def _normalize_completion_for_tool_parsing(text: str) -> str:
+    if not text:
+        return text
+    return _strip_leading_empty_think_wrapper(text)
+
+
+def _strip_leading_empty_think_wrapper(text: str) -> str:
+    pattern = re.compile(
+        r"^\s*(?:<\|im_start\|>assistant|assistant)?\s*<think>\s*</think>\s*",
+        re.S,
+    )
+    normalized = text
+    while True:
+        updated = pattern.sub("", normalized, count=1)
+        if updated == normalized:
+            return normalized.strip()
+        normalized = updated
 
 
 def _last_tool_name(text: str) -> tuple[str | None, int]:
