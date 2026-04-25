@@ -43,7 +43,9 @@ def test_prompt_rows_match_grpo_dataset_shape() -> None:
     assert len(rows["prompt"]) == 3
     assert rows["prompt"][0][0]["role"] == "system"
     assert rows["prompt"][0][0]["content"] == TOOL_SYSTEM_PROMPT
+    assert rows["prompt"][0][0]["content"].startswith("/no_think")
     assert rows["prompt"][0][1]["role"] == "user"
+    assert rows["prompt"][0][1]["content"].startswith("/no_think")
     assert "AtomicVision" in rows["prompt"][0][1]["content"]
     assert "quick_pdos" in rows["prompt"][0][1]["content"]
     assert "0.0 to 20.0" in rows["prompt"][0][1]["content"]
@@ -72,6 +74,7 @@ def test_prompt_rows_allow_system_prompt_ablation() -> None:
 
 
 def test_tool_system_prompt_uses_explicit_schema_examples() -> None:
+    assert TOOL_SYSTEM_PROMPT.startswith("/no_think")
     assert "<tool_call>...</tool_call>" not in TOOL_SYSTEM_PROMPT
     assert '"name":"ask_prior"' in TOOL_SYSTEM_PROMPT
     assert '"name":"submit_defect_map"' in TOOL_SYSTEM_PROMPT

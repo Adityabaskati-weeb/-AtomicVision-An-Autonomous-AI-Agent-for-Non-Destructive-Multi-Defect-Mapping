@@ -68,6 +68,7 @@ LORA_TARGET_MODULES = [
     "down_proj",
 ]
 TOOL_SYSTEM_PROMPT = (
+    "/no_think\n"
     "You are using AtomicVision tools. Return exactly one XML-wrapped JSON tool call "
     "and nothing else. The only valid format is "
     '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call> '
@@ -85,6 +86,7 @@ TOOL_SYSTEM_PROMPT = (
     "Stop immediately after the closing </tool_call> tag."
 )
 DEFAULT_PROMPT = (
+    "/no_think\n"
     "You are AtomicVision, an autonomous materials characterization agent. "
     "Your task is to infer hidden atomic defects from non-invasive spectral evidence. "
     "Maximize reward by submitting accurate defect identities and concentrations while "
