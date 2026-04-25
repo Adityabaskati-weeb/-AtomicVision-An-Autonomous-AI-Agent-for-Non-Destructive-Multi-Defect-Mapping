@@ -125,3 +125,45 @@ Practical takeaway:
 
 - Generation-side sequence bias alone is **not** the missing strict-XML fix for this model/setup.
 - The best baseline remains V12: tiny `format_refresh` warmup plus the un-biased short GRPO probe.
+
+## V15: Structured Tool-Call Strict Refresh Warmup
+
+- Job: [69eca7e4d2c8bd8662bcd8c5](https://huggingface.co/jobs/prodigyhuh/69eca7e4d2c8bd8662bcd8c5)
+- Commit: `8871df85331e27444b4e6c117f8c5fecb49d122e`
+- Metrics: [hard-only-grpo-structured-toolcall-v15-metrics.json](./hard-only-grpo-structured-toolcall-v15-metrics.json)
+
+Setup:
+
+- Reworked the strict refresh warmup so the assistant target is stored as a
+  structured `tool_calls` message instead of a literal `<tool_call>...</tool_call>`
+  string.
+- Updated SFT validation and target rendering to let the tokenizer chat template
+  produce the final assistant tool envelope.
+- Ran the same tiny hard-only strict refresh warmup and the same 4-step hard
+  GRPO probe as V12, but with a pre-downloaded local base-model snapshot so the
+  run could not fail on late Hub auth.
+
+Key result compared with V12:
+
+- `reward`: `2.90 -> 2.46`
+- `reward_std`: `1.02 -> 0.52`
+- `done_rate`: `0.78125 -> 0.75`
+- `submit_tool_rate`: `0.21875 -> 0.25`
+- `raw_tool_call_tag_rate`: `0.21875 -> 0.25`
+- `normalized_tool_call_pass_rate`: stayed `1.0`
+- `strict_tool_call_pass_rate`: stayed `0.0`
+
+Interpretation:
+
+- The local-snapshot fix solved the HF Jobs infrastructure problem cleanly: the
+  run completed end to end and produced a persistent summary.
+- The structured-tool-call warmup did **not** improve strict XML submission on
+  the short GRPO probe.
+- It slightly increased raw wrapper usage and submit frequency, but at the cost
+  of lower reward and lower reward variance than the better V12 baseline.
+
+Practical takeaway:
+
+- Teaching structured assistant tool calls in the warmup is compatible with the
+  training stack, but it is **not** the missing strict-XML fix by itself.
+- V12 remains the better behavioral baseline for the next iteration.
