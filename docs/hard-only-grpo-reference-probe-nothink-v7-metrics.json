@@ -1,0 +1,29 @@
+{
+  "job_id": "69ec7e99d70108f37acde34b",
+  "job_url": "https://huggingface.co/jobs/prodigyhuh/69ec7e99d70108f37acde34b",
+  "hardware": "a10g-large",
+  "base_adapter": "prodigyhuh/atomicvision-medium-fidelity-boost-lora",
+  "prompt_focus": "reference-improvement",
+  "difficulty": "hard",
+  "seed_band": "4000-7999",
+  "code_branch": "codex-strict-submit-contract-probe",
+  "code_commit": "85a0874053c956d7ed5d2109e60154432494baef",
+  "final_metrics": {
+    "reward_std": 0.45696303248405457,
+    "frac_reward_zero_std": 0.75,
+    "done_rate": 0.25,
+    "ask_prior_tool_rate": 0.25,
+    "normalized_tool_call_pass_rate": 0.25,
+    "normalized_tool_call_repair_rate": 0.25,
+    "submit_tool_rate": 0.0,
+    "strict_tool_call_pass_rate": 0.0,
+    "strict_submit_reward_mean": 0.0,
+    "tools_failure_frequency": 0.0,
+    "format_reward_mean": -0.02500000037252903,
+    "process_shaping_reward_mean": -0.015625,
+    "total_reward_mean": 0.16770771145820618,
+    "train_loss": 3.9497248138786745e-08,
+    "train_runtime_s": 65.852
+  },
+  "verdict": "official-qwen-no-think-switch-confirmed-in-prompts-but-behavior-still-shows-think-wrapper"
+}

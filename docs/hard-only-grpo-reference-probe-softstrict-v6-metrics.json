@@ -1,0 +1,29 @@
+{
+  "job_id": "69ec7d0fd2c8bd8662bcd59a",
+  "job_url": "https://huggingface.co/jobs/prodigyhuh/69ec7d0fd2c8bd8662bcd59a",
+  "hardware": "a10g-large",
+  "base_adapter": "prodigyhuh/atomicvision-medium-fidelity-boost-lora",
+  "prompt_focus": "reference-improvement",
+  "difficulty": "hard",
+  "seed_band": "4000-7999",
+  "code_branch": "codex-strict-submit-contract-probe",
+  "code_commit": "14bd15eb0f3a116f8b6b71412572378a5fecd515",
+  "final_metrics": {
+    "reward_std": 0.34901130199432373,
+    "frac_reward_zero_std": 0.75,
+    "done_rate": 0.25,
+    "ask_prior_tool_rate": 0.25,
+    "normalized_tool_call_pass_rate": 0.25,
+    "normalized_tool_call_repair_rate": 0.25,
+    "submit_tool_rate": 0.0,
+    "strict_tool_call_pass_rate": 0.0,
+    "strict_submit_reward_mean": 0.0,
+    "tools_failure_frequency": 0.0,
+    "format_reward_mean": -0.02500000037252903,
+    "process_shaping_reward_mean": -0.01406249962747097,
+    "total_reward_mean": 0.2911018431186676,
+    "train_loss": 4.3938367610962814e-08,
+    "train_runtime_s": 64.9792
+  },
+  "verdict": "variance-recovered-partially-but-submit-path-did-not-land"
+}
