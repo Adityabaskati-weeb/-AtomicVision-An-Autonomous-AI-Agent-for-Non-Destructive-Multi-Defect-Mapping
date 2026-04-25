@@ -197,6 +197,29 @@ def test_strict_xml_submit_refresh_examples_focus_on_reference_submit_turns() ->
         assert example["reward_improvement"] >= 0.10
 
 
+def test_strict_xml_submit_refresh_examples_support_structured_tool_calls() -> None:
+    examples = build_strict_xml_submit_refresh_examples(
+        examples_per_difficulty=4,
+        difficulties=("hard",),
+        seed_start=3600,
+        max_scan_candidates_per_difficulty=512,
+        structured_tool_calls=True,
+    )
+
+    assert len(examples) == 4
+    for example in examples:
+        assistant_messages = [
+            message for message in example["messages"] if message["role"] == "assistant"
+        ]
+        assert all(message.get("tool_calls") for message in assistant_messages)
+        assert all(message.get("content", "") == "" for message in assistant_messages)
+        tool_names = [
+            message["tool_calls"][0]["function"]["name"] for message in assistant_messages
+        ]
+        assert tool_names == ["ask_prior", "compare_reference", "submit_defect_map"]
+        assert example["target_tool_call"].startswith("<tool_call>")
+
+
 def test_sft_generator_cli_writes_scan_improvement_jsonl() -> None:
     output_path = Path(f"outputs/test-sft-generator/atomicvision_scan_sft_{os.getpid()}.jsonl")
     output_path.parent.mkdir(parents=True, exist_ok=True)

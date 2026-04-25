@@ -116,12 +116,17 @@ def validate_sft_rows(rows: Iterable[dict[str, Any]]) -> SftRowStats:
             content = message.get("content")
             if role not in VALID_ROLES:
                 raise ValueError(f"{row_id}: message {message_index} has invalid role {role!r}")
+            if role == "assistant" and message.get("tool_calls") is not None:
+                parse_tool_call_message(
+                    message,
+                    row_id=f"{row_id}: message {message_index}",
+                )
+                continue
             if not isinstance(content, str) or not content.strip():
                 raise ValueError(f"{row_id}: message {message_index} has empty content")
         if messages[-1].get("role") != "assistant":
             raise ValueError(f"{row_id}: final message must be assistant")
-        final_content = messages[-1]["content"]
-        call = parse_tool_call_text(final_content, row_id=row_id)
+        call = parse_tool_call_message(messages[-1], row_id=row_id)
         tool_name = call.get("name")
         if not isinstance(tool_name, str) or not tool_name:
             raise ValueError(f"{row_id}: final tool call missing name")
@@ -164,13 +169,52 @@ def parse_tool_call_text(text: str, row_id: str = "row") -> dict[str, Any]:
     return call
 
 
+def parse_tool_call_message(message: dict[str, Any], row_id: str = "row") -> dict[str, Any]:
+    """Parse a final assistant tool call from literal or structured chat data."""
+
+    tool_calls = message.get("tool_calls")
+    if tool_calls is not None:
+        if not isinstance(tool_calls, list) or len(tool_calls) != 1:
+            raise ValueError(f"{row_id}: assistant tool_calls must contain exactly one entry")
+        entry = tool_calls[0]
+        if not isinstance(entry, dict):
+            raise ValueError(f"{row_id}: assistant tool_calls entry is not an object")
+        entry_type = entry.get("type")
+        if entry_type not in (None, "function"):
+            raise ValueError(f"{row_id}: unsupported assistant tool_calls type {entry_type!r}")
+        function = entry.get("function", entry)
+        if not isinstance(function, dict):
+            raise ValueError(f"{row_id}: assistant tool_calls function payload is not an object")
+        name = function.get("name")
+        arguments = function.get("arguments")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"{row_id}: assistant tool call missing name")
+        if not isinstance(arguments, dict):
+            raise ValueError(f"{row_id}: assistant tool call arguments must be an object")
+        return {"name": name, "arguments": arguments}
+
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise ValueError(f"{row_id}: assistant message content must be a string")
+    return parse_tool_call_text(content, row_id=row_id)
+
+
 def build_prompt_and_target(row: dict[str, Any], tokenizer: Any) -> tuple[str, str]:
     """Render all context as prompt and the final assistant turn as target."""
 
     messages = row["messages"]
     prompt_messages = messages[:-1]
-    target = messages[-1]["content"]
+    target_message = messages[-1]
+    structured_target = bool(target_message.get("tool_calls"))
     if hasattr(tokenizer, "apply_chat_template") and getattr(tokenizer, "chat_template", None):
+        if structured_target:
+            rendered = render_structured_prompt_and_target(
+                tokenizer,
+                prompt_messages,
+                target_message,
+            )
+            if rendered is not None:
+                return rendered
         prompt = render_chat_prompt_with_disabled_thinking(
             tokenizer,
             prompt_messages,
@@ -178,6 +222,7 @@ def build_prompt_and_target(row: dict[str, Any], tokenizer: Any) -> tuple[str, s
         )
     else:
         prompt = render_fallback_chat_prompt(prompt_messages)
+    target = assistant_message_target_text(target_message, row=row)
     return prompt, target
 
 
@@ -201,6 +246,35 @@ def render_chat_prompt_with_disabled_thinking(
             tokenize=False,
             add_generation_prompt=add_generation_prompt,
         )
+
+
+def render_structured_prompt_and_target(
+    tokenizer: Any,
+    prompt_messages: list[dict[str, Any]],
+    target_message: dict[str, Any],
+) -> tuple[str, str] | None:
+    """Render a structured assistant tool call using the chat template itself."""
+
+    full_messages = [*prompt_messages, target_message]
+    try:
+        prompt = render_chat_prompt_with_disabled_thinking(
+            tokenizer,
+            prompt_messages,
+            add_generation_prompt=True,
+        )
+        full_text = render_chat_prompt_with_disabled_thinking(
+            tokenizer,
+            full_messages,
+            add_generation_prompt=False,
+        )
+    except Exception:
+        return None
+    if not full_text.startswith(prompt):
+        return None
+    target = full_text[len(prompt) :]
+    if not target:
+        return None
+    return prompt, target
 
 
 def apply_training_chat_template_if_available(
@@ -236,9 +310,44 @@ def render_fallback_chat_prompt(messages: list[dict[str, str]]) -> str:
 
     rendered: list[str] = []
     for message in messages:
-        rendered.append(f"<|{message['role']}|>\n{message['content'].strip()}\n")
+        rendered.append(
+            f"<|{message['role']}|>\n{fallback_message_content(message).strip()}\n"
+        )
     rendered.append("<|assistant|>\n")
     return "".join(rendered)
+
+
+def assistant_message_target_text(message: dict[str, Any], row: dict[str, Any]) -> str:
+    """Return the assistant target text, using metadata when structured."""
+
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content
+    target = row.get("target_tool_call")
+    if isinstance(target, str) and target.strip():
+        return target
+    return fallback_message_content(message)
+
+
+def fallback_message_content(message: dict[str, Any]) -> str:
+    """Render one message into a fallback plain-text representation."""
+
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content
+    if message.get("role") == "assistant" and message.get("tool_calls") is not None:
+        return render_tool_call_text(parse_tool_call_message(message))
+    raise ValueError(f"Unsupported fallback message content for role {message.get('role')!r}")
+
+
+def render_tool_call_text(call: dict[str, Any]) -> str:
+    """Render one AtomicVision tool call as the exact XML envelope."""
+
+    return (
+        "<tool_call>"
+        f"{json.dumps(call, separators=(',', ':'), ensure_ascii=True)}"
+        "</tool_call>"
+    )
 
 
 def tokenize_with_assistant_mask(

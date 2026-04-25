@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 
 import pytest
@@ -56,6 +57,24 @@ class ThinkingAwareTokenizer(TinyTokenizer):
         )
 
 
+class ToolCallAwareTokenizer(TinyTokenizer):
+    def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
+        assert tokenize is False
+        rendered = ""
+        for message in messages:
+            if message.get("role") == "assistant" and message.get("tool_calls") is not None:
+                call = message["tool_calls"][0]["function"]
+                rendered += (
+                    "<assistant>\n"
+                    f"<tool_call>{json.dumps(call, separators=(',', ':'), ensure_ascii=True)}</tool_call>\n"
+                )
+            else:
+                rendered += f"<{message['role']}>\n{message['content']}\n"
+        if add_generation_prompt:
+            rendered += "<assistant>\n"
+        return rendered
+
+
 def _valid_row(sample_id: str = "medium-0-ask_prior"):
     return {
         "sample_id": sample_id,
@@ -72,12 +91,46 @@ def _valid_row(sample_id: str = "medium-0-ask_prior"):
     }
 
 
+def _valid_structured_row(sample_id: str = "hard-0-submit_after_reference"):
+    call = {
+        "name": "submit_defect_map",
+        "arguments": {
+            "predicted_defects": ["O"],
+            "predicted_concentrations": [0.12],
+            "confidence": 0.73,
+        },
+    }
+    return {
+        "sample_id": sample_id,
+        "sample_type": "submit_after_reference",
+        "target_tool_name": "submit_defect_map",
+        "target_tool_call": '<tool_call>{"name":"submit_defect_map","arguments":{"predicted_defects":["O"],"predicted_concentrations":[0.12],"confidence":0.73}}</tool_call>',
+        "messages": [
+            {"role": "system", "content": "Use AtomicVision tools."},
+            {"role": "user", "content": "Observation: synthetic case"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"type": "function", "function": call}],
+            },
+        ],
+    }
+
+
 def test_validate_sft_rows_accepts_atomicvision_tool_call():
     stats = validate_sft_rows([_valid_row()])
 
     assert stats.rows == 1
     assert stats.sample_counts == {"ask_prior": 1}
     assert stats.final_tool_counts == {"ask_prior": 1}
+
+
+def test_validate_sft_rows_accepts_structured_assistant_tool_calls():
+    stats = validate_sft_rows([_valid_structured_row()])
+
+    assert stats.rows == 1
+    assert stats.sample_counts == {"submit_after_reference": 1}
+    assert stats.final_tool_counts == {"submit_defect_map": 1}
 
 
 def test_validate_sft_rows_rejects_non_assistant_final_message():
@@ -107,6 +160,17 @@ def test_tokenize_with_assistant_mask_has_trainable_labels():
     assert example.valid_label_tokens > 0
     assert any(label != -100 for label in example.labels)
     assert all(label == -100 for label in example.labels[:5])
+
+
+def test_tokenize_with_assistant_mask_supports_structured_tool_call_targets():
+    example = tokenize_with_assistant_mask(
+        _valid_structured_row(),
+        ToolCallAwareTokenizer(),
+        max_length=256,
+    )
+
+    assert example.valid_label_tokens > 0
+    assert any(label != -100 for label in example.labels)
 
 
 def test_tokenize_with_assistant_mask_preserves_labels_after_left_truncation():

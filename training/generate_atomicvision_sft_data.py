@@ -245,6 +245,7 @@ def build_strict_xml_submit_refresh_examples(
     seed_start: int = 0,
     min_scan_improvement: float = STRICT_XML_SUBMIT_REFRESH_MIN_SCAN_IMPROVEMENT,
     max_scan_candidates_per_difficulty: int | None = STRICT_XML_SUBMIT_REFRESH_MAX_SCAN_CANDIDATES,
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build a submit-only hard refresh set shaped around GRPO XML failures.
 
@@ -274,6 +275,7 @@ def build_strict_xml_submit_refresh_examples(
                 seed=seed,
                 difficulty=difficulty,
                 min_scan_improvement=min_scan_improvement,
+                structured_tool_calls=structured_tool_calls,
             )
             if example is None:
                 raise ValueError(
@@ -389,6 +391,7 @@ def build_scan_improvement_example(
     seed: int,
     difficulty: str = "medium",
     min_scan_improvement: float = 0.25,
+    structured_tool_calls: bool = False,
 ) -> dict[str, Any] | None:
     """Build one curated reference-then-submit example, or return None."""
 
@@ -446,11 +449,14 @@ def build_scan_improvement_example(
         "messages": [
             {"role": "system", "content": TOOL_SYSTEM},
             {"role": "user", "content": initial_user},
-            {"role": "assistant", "content": ask_text},
+            _assistant_tool_message(ASK_PRIOR_CALL, structured_tool_calls=structured_tool_calls),
             {"role": "user", "content": _tool_response(prior_text)},
-            {"role": "assistant", "content": reference_text},
+            _assistant_tool_message(
+                COMPARE_REFERENCE_CALL,
+                structured_tool_calls=structured_tool_calls,
+            ),
             {"role": "user", "content": _tool_response(reference_response)},
-            {"role": "assistant", "content": submit_text},
+            _assistant_tool_message(submit_call, structured_tool_calls=structured_tool_calls),
         ],
     }
 
@@ -499,6 +505,28 @@ def _model_dump(value: Any) -> dict[str, Any]:
 def _tool_call_text(call: dict[str, Any]) -> str:
     payload = json.dumps(call, separators=(",", ":"), ensure_ascii=True)
     return f"<tool_call>{payload}</tool_call>"
+
+
+def _assistant_tool_message(
+    call: dict[str, Any],
+    *,
+    structured_tool_calls: bool,
+) -> dict[str, Any]:
+    if not structured_tool_calls:
+        return {"role": "assistant", "content": _tool_call_text(call)}
+    return {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "type": "function",
+                "function": {
+                    "name": str(call["name"]),
+                    "arguments": dict(call["arguments"]),
+                },
+            }
+        ],
+    }
 
 
 def _user_message(observation_text: str) -> str:
@@ -578,6 +606,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--output-jsonl",
         default="outputs/sft/atomicvision_tool_copy_sft.jsonl",
     )
+    parser.add_argument(
+        "--assistant-tool-format",
+        choices=("literal", "structured"),
+        default="literal",
+        help=(
+            "literal stores assistant tool turns as exact <tool_call> text. "
+            "structured stores assistant tool turns as HF-style tool_calls so "
+            "the chat template renders the tool envelope during training."
+        ),
+    )
     return parser
 
 
@@ -655,6 +693,7 @@ def main() -> None:
             seed_start=args.seed_start,
             min_scan_improvement=min_scan_improvement,
             max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+            structured_tool_calls=args.assistant_tool_format == "structured",
         )
     elif args.profile == "two_step_curriculum":
         examples = build_two_step_curriculum_examples(
