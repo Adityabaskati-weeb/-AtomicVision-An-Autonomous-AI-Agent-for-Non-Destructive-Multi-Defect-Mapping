@@ -5,6 +5,7 @@ import math
 import pytest
 
 from training.train_sft_atomicvision_safe import (
+    apply_training_chat_template_if_available,
     assert_finite_number,
     parse_args,
     parse_tool_call_text,
@@ -143,6 +144,30 @@ def test_render_chat_prompt_disables_thinking_when_supported():
 
     assert "<assistant>" in prompt
     assert tokenizer.calls == [False]
+
+
+def test_apply_training_chat_template_if_available_uses_trl_patch_when_provided():
+    tokenizer = TinyTokenizer()
+
+    changed = apply_training_chat_template_if_available(
+        tokenizer,
+        get_training_chat_template_fn=lambda _tokenizer: "patched-template",
+    )
+
+    assert changed is True
+    assert tokenizer.chat_template == "patched-template"
+
+
+def test_apply_training_chat_template_if_available_noops_without_patch():
+    tokenizer = TinyTokenizer()
+
+    changed = apply_training_chat_template_if_available(
+        tokenizer,
+        get_training_chat_template_fn=lambda _tokenizer: None,
+    )
+
+    assert changed is False
+    assert tokenizer.chat_template == "tiny"
 
 
 def test_assert_finite_number_rejects_nan_and_inf():

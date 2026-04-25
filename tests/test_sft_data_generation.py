@@ -12,6 +12,7 @@ from training.generate_atomicvision_sft_data import (
     build_format_refresh_examples,
     build_hard_frontier_boost_examples,
     build_sft_examples,
+    build_strict_xml_submit_refresh_examples,
 )
 from training.seed_ranges import SFT_TRAIN_SEED_START
 
@@ -170,6 +171,30 @@ def test_format_refresh_examples_are_submit_heavy_and_reference_free() -> None:
         "submit_prior": 18,
     }
     assert {example["difficulty"] for example in examples} == {"hard"}
+
+
+def test_strict_xml_submit_refresh_examples_focus_on_reference_submit_turns() -> None:
+    examples = build_strict_xml_submit_refresh_examples(
+        examples_per_difficulty=8,
+        difficulties=("hard",),
+        seed_start=3600,
+        max_scan_candidates_per_difficulty=512,
+    )
+
+    assert len(examples) == 8
+    assert _counts_by_type(examples) == {"submit_after_reference": 8}
+    for example in examples:
+        assistant_calls = [
+            _parse_tool_call(message["content"])
+            for message in example["messages"]
+            if message["role"] == "assistant"
+        ]
+        assert [call["name"] for call in assistant_calls] == [
+            "ask_prior",
+            "compare_reference",
+            "submit_defect_map",
+        ]
+        assert example["reward_improvement"] >= 0.10
 
 
 def test_sft_generator_cli_writes_scan_improvement_jsonl() -> None:

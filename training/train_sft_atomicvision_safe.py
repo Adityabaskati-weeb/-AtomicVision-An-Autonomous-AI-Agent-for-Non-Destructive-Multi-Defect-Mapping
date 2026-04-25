@@ -203,6 +203,34 @@ def render_chat_prompt_with_disabled_thinking(
         )
 
 
+def apply_training_chat_template_if_available(
+    tokenizer: Any,
+    *,
+    get_training_chat_template_fn: Any | None = None,
+) -> bool:
+    """Patch known tokenizers to TRL's training-compatible chat template.
+
+    TRL ships a Qwen3 training template that is prefix-preserving for tool use
+    and stable for assistant-only loss masking. Using the same training-aware
+    template in the SFT warmup keeps the prompt format closer to the later GRPO
+    path.
+    """
+
+    if not getattr(tokenizer, "chat_template", None):
+        return False
+    if get_training_chat_template_fn is None:
+        try:
+            from trl.chat_template_utils import get_training_chat_template
+        except Exception:
+            return False
+        get_training_chat_template_fn = get_training_chat_template
+    training_template = get_training_chat_template_fn(tokenizer)
+    if not training_template:
+        return False
+    tokenizer.chat_template = training_template
+    return True
+
+
 def render_fallback_chat_prompt(messages: list[dict[str, str]]) -> str:
     """Simple fallback used only if a tokenizer has no chat template."""
 
@@ -308,6 +336,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         tokenizer.pad_token = tokenizer.eos_token
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
+    if apply_training_chat_template_if_available(tokenizer):
+        print("Applied TRL training chat template for tokenizer compatibility")
 
     if args.max_examples:
         rows = rows[: args.max_examples]
