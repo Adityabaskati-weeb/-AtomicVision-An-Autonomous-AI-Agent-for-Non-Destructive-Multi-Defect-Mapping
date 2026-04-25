@@ -28,6 +28,7 @@ from training.train_grpo_atomicvision import (
     build_prompt_rows,
     reward_func,
 )
+from training.seed_ranges import GRPO_TRAIN_SEED_START
 from atomicvision_env.models import AtomicVisionAction
 
 
@@ -46,7 +47,11 @@ def test_prompt_rows_match_grpo_dataset_shape() -> None:
     assert "0.50-0.65" in rows["prompt"][0][1]["content"]
     assert "standard_pdos costs 2.0" in rows["prompt"][0][1]["content"]
     assert "submit_defect_map is terminal" in rows["prompt"][0][1]["content"]
-    assert rows["seed"] == [0, 1, 2]
+    assert rows["seed"] == [
+        GRPO_TRAIN_SEED_START,
+        GRPO_TRAIN_SEED_START + 1,
+        GRPO_TRAIN_SEED_START + 2,
+    ]
     assert rows["difficulty"] == ["hard", "hard", "hard"]
 
 
@@ -274,7 +279,7 @@ def test_cost_aware_grpo_presets_focus_on_frontier_seed_pool() -> None:
         preset = TRAINING_PRESETS[preset_name]
 
         assert preset["prompt_focus"] == "grpo-frontier"
-        assert preset["seed_start"] >= 2000
+        assert preset["seed_start"] >= GRPO_TRAIN_SEED_START
         assert preset["scale_rewards"] == "batch"
         assert preset["learning_rate"] <= 1.0e-6
 
@@ -333,6 +338,14 @@ def test_cli_accepts_adapter_continuation_args() -> None:
     assert args.seed_start == 2000
     assert args.min_reference_improvement == 1.0
     assert args.no_tool_system_prompt is False
+
+
+def test_grpo_cli_defaults_to_official_training_band() -> None:
+    parser = build_arg_parser()
+
+    args = parser.parse_args([])
+
+    assert args.seed_start == GRPO_TRAIN_SEED_START
 
 
 def test_tool_env_is_lazy_and_requires_reset_before_tools() -> None:

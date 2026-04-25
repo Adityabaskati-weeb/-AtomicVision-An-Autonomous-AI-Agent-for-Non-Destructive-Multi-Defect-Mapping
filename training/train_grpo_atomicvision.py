@@ -24,6 +24,7 @@ from atomicvision_env.client import AtomicVisionEnv
 from atomicvision_env.models import AtomicVisionAction
 from atomicvision.rewards import reward_component_dict, reward_source_totals, score_submission
 from atomicvision_env.server.environment import AtomicVisionEnvironment
+from training.seed_ranges import GRPO_TRAIN_SEED_START
 
 
 DEFAULT_ENV_URL = "https://prodigyhuh-atomicvision-openenv.hf.space"
@@ -122,7 +123,7 @@ TRAINING_PRESETS: dict[str, dict[str, Any]] = {
     "variance-probe": {
         "model": "Qwen/Qwen3-1.7B",
         "samples": 32,
-        "seed_start": 2000,
+        "seed_start": GRPO_TRAIN_SEED_START,
         "prompt_focus": "grpo-frontier",
         "max_seed_candidates": 1024,
         "max_steps": 3,
@@ -141,7 +142,7 @@ TRAINING_PRESETS: dict[str, dict[str, Any]] = {
     "cost-aware-variance-probe": {
         "model": "Qwen/Qwen3-1.7B",
         "samples": 32,
-        "seed_start": 2000,
+        "seed_start": GRPO_TRAIN_SEED_START,
         "prompt_focus": "grpo-frontier",
         "max_seed_candidates": 1024,
         "max_steps": 3,
@@ -161,7 +162,7 @@ TRAINING_PRESETS: dict[str, dict[str, Any]] = {
     "cost-aware-grpo-20": {
         "model": "Qwen/Qwen3-1.7B",
         "samples": 64,
-        "seed_start": 2000,
+        "seed_start": GRPO_TRAIN_SEED_START,
         "prompt_focus": "grpo-frontier",
         "max_seed_candidates": 2048,
         "max_steps": 20,
@@ -181,7 +182,7 @@ TRAINING_PRESETS: dict[str, dict[str, Any]] = {
     "cost-aware-grpo-100": {
         "model": "Qwen/Qwen3-1.7B",
         "samples": 256,
-        "seed_start": 2000,
+        "seed_start": GRPO_TRAIN_SEED_START,
         "prompt_focus": "grpo-frontier",
         "max_seed_candidates": 4096,
         "max_steps": 100,
@@ -559,7 +560,7 @@ def build_prompt_rows(
     samples: int,
     difficulty: str = "medium",
     include_tool_system_prompt: bool = True,
-    seed_start: int = 0,
+    seed_start: int = GRPO_TRAIN_SEED_START,
     prompt_focus: str = "all",
     min_prior_confidence: float = 0.45,
     max_prior_confidence: float = 0.65,
@@ -593,7 +594,7 @@ def build_dataset(
     samples: int,
     difficulty: str = "medium",
     include_tool_system_prompt: bool = True,
-    seed_start: int = 0,
+    seed_start: int = GRPO_TRAIN_SEED_START,
     prompt_focus: str = "all",
     min_prior_confidence: float = 0.45,
     max_prior_confidence: float = 0.65,
@@ -727,7 +728,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env-url", default=None)
     parser.add_argument("--difficulty", default="medium", choices=["easy", "medium", "hard"])
     parser.add_argument("--samples", type=int, default=32)
-    parser.add_argument("--seed-start", type=int, default=0)
+    parser.add_argument("--seed-start", type=int, default=GRPO_TRAIN_SEED_START)
     parser.add_argument(
         "--prompt-focus",
         choices=PROMPT_FOCI,

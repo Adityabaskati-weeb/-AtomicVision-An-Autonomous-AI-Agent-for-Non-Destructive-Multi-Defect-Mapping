@@ -24,6 +24,7 @@ from atomicvision_env.models import AtomicVisionAction  # noqa: E402
 from atomicvision_env.server.environment import AtomicVisionEnvironment  # noqa: E402
 from atomicvision.rewards import score_submission  # noqa: E402
 from atomicvision.synthetic.types import MaterialCase  # noqa: E402
+from training.seed_ranges import SFT_TRAIN_SEED_START  # noqa: E402
 from training.train_grpo_atomicvision import (  # noqa: E402
     DEFAULT_PROMPT,
     TOOL_SYSTEM_PROMPT,
@@ -53,7 +54,7 @@ HARD_FRONTIER_MAX_SCAN_CANDIDATES = 1024
 def build_sft_examples(
     episodes_per_difficulty: int,
     difficulties: tuple[str, ...] = ("medium",),
-    seed_start: int = 0,
+    seed_start: int = SFT_TRAIN_SEED_START,
     sample_types: tuple[str, ...] = ("ask_prior", "submit_prior"),
     min_scan_improvement: float = 0.25,
     max_scan_candidates_per_difficulty: int | None = None,
@@ -430,7 +431,7 @@ def _tool_response(observation_text: str) -> str:
     return f"<tool_response>\n{observation_text}\n</tool_response>"
 
 
-def main() -> None:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate AtomicVision SFT JSONL for exact prior-to-tool-call copying.",
     )
@@ -457,7 +458,7 @@ def main() -> None:
             "continuation runs."
         ),
     )
-    parser.add_argument("--seed-start", type=int, default=0)
+    parser.add_argument("--seed-start", type=int, default=SFT_TRAIN_SEED_START)
     parser.add_argument("--difficulties", nargs="+", default=["medium"])
     parser.add_argument(
         "--sample-types",
@@ -493,7 +494,11 @@ def main() -> None:
         "--output-jsonl",
         default="outputs/sft/atomicvision_tool_copy_sft.jsonl",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    args = build_arg_parser().parse_args()
 
     if args.profile == "cost_aware":
         examples = build_cost_aware_sft_examples(

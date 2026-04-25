@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from training.evaluate_atomicvision_adapter import extract_tool_call, summarize
+import pytest
+
+from training.evaluate_atomicvision_adapter import (
+    _validate_heldout_seed_band,
+    build_arg_parser,
+    extract_tool_call,
+    summarize,
+)
+from training.seed_ranges import HELDOUT_EVAL_SEED_START
 
 
 def test_extract_tool_call_distinguishes_strict_and_normalized_modes() -> None:
@@ -85,3 +93,20 @@ def test_summarize_reports_verifier_columns() -> None:
     assert summary["submit_action_rate"] == 0.5
     assert summary["mean_outcome_reward_total"] == 2.0
     assert summary["mean_penalty_total"] == -0.6
+
+
+def test_eval_cli_defaults_to_heldout_seed_band() -> None:
+    parser = build_arg_parser()
+
+    args = parser.parse_args(["--adapter-dir", "dummy"])
+
+    assert args.seed_start == HELDOUT_EVAL_SEED_START
+
+
+def test_eval_rejects_non_heldout_seed_band_by_default() -> None:
+    with pytest.raises(ValueError, match="official eval band"):
+        _validate_heldout_seed_band(
+            seed_start=1000,
+            episodes=32,
+            allow_non_heldout_seeds=False,
+        )

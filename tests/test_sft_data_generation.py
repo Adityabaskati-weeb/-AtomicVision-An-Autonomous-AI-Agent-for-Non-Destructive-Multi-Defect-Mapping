@@ -7,10 +7,12 @@ import sys
 from pathlib import Path
 
 from training.generate_atomicvision_sft_data import (
+    build_arg_parser,
     build_cost_aware_sft_examples,
     build_hard_frontier_boost_examples,
     build_sft_examples,
 )
+from training.seed_ranges import SFT_TRAIN_SEED_START
 
 
 def test_submit_prior_examples_copy_prior_exactly() -> None:
@@ -31,6 +33,14 @@ def test_submit_prior_examples_copy_prior_exactly() -> None:
         assert args["predicted_concentrations"] == prior["predicted_concentrations"]
         assert args["confidence"] == prior["confidence"]
         assert example["messages"][-1]["content"] == example["target_tool_call"]
+
+
+def test_sft_generator_cli_defaults_to_sft_training_band() -> None:
+    parser = build_arg_parser()
+
+    args = parser.parse_args([])
+
+    assert args.seed_start == SFT_TRAIN_SEED_START
 
 
 def test_sft_generator_cli_writes_jsonl() -> None:

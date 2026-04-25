@@ -31,6 +31,8 @@ def test_judge_colab_notebook_exists_and_targets_repro_flow() -> None:
     assert "hard_frontier_boost" in source_text
     assert "atomicvision_hard_frontier_boost_sft.jsonl" in source_text
     assert "atomicvision-hard-frontier-boost-lora" in source_text
+    assert "HELDOUT_EVAL_SEED_START = 10000" in source_text
+    assert "10000-10999" in source_text
     assert "strict" in source_text
     assert "normalized" in source_text
     assert "prodigyhuh/atomicvision-format-submit-merged-lora" in source_text

@@ -3,6 +3,17 @@
 This runbook is the operational guide for AtomicVision GRPO training across
 Colab, Kaggle, and Hugging Face runtimes.
 
+## Permanent Seed Policy
+
+Use one seed split everywhere so held-out evaluation stays honest:
+
+- SFT data generation: `1000-3999`
+- GRPO prompt selection: `4000-7999`
+- held-out evaluation only: `10000-10999`
+
+If you need to compare against older overlapping runs, mark them as historical
+debugging runs and do not use them for promotion.
+
 ## Current Safe Smoke Configuration
 
 Use this first everywhere:
@@ -332,7 +343,7 @@ python training/evaluate_atomicvision_adapter.py \
   --base-model Qwen/Qwen3-1.7B \
   --difficulties medium hard \
   --episodes 32 \
-  --seed-start 1000 \
+  --seed-start 10000 \
   --output-json /kaggle/working/atomicvision_adapter_eval.json
 ```
 
@@ -461,7 +472,7 @@ python training/train_grpo_atomicvision.py \
   --run-name atomicvision-cost-aware-grpo-variance-probe
 ```
 
-This preset uses `--prompt-focus grpo-frontier`, `--seed-start 2000`, and a
+This preset uses `--prompt-focus grpo-frontier`, `--seed-start 4000`, and a
 frontier seed scan. That means GRPO trains on uncertain or reference-improvable
 episodes instead of replaying the easy deterministic SFT cases.
 

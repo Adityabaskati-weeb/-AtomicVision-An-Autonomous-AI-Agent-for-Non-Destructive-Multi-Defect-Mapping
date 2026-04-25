@@ -23,6 +23,11 @@ from training.train_grpo_atomicvision import (  # noqa: E402
     canonicalize_tool_call_text,
     parse_strict_tool_call,
 )
+from training.seed_ranges import (  # noqa: E402
+    HELDOUT_EVAL_BAND,
+    HELDOUT_EVAL_SEED_START,
+    seed_policy_dict,
+)
 
 EVAL_MODES = ("strict", "normalized")
 
@@ -33,9 +38,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-model", default="Qwen/Qwen3-1.7B")
     parser.add_argument("--difficulties", nargs="+", default=["medium", "hard"])
     parser.add_argument("--episodes", type=int, default=32)
-    parser.add_argument("--seed-start", type=int, default=1000)
+    parser.add_argument("--seed-start", type=int, default=HELDOUT_EVAL_SEED_START)
     parser.add_argument("--max-tool-steps", type=int, default=3)
     parser.add_argument("--max-new-tokens", type=int, default=180)
+    parser.add_argument(
+        "--allow-non-heldout-seeds",
+        action="store_true",
+        help=(
+            "Allow evaluation outside the official held-out seed band. "
+            "Use only for debugging or historical comparisons."
+        ),
+    )
     parser.add_argument(
         "--modes",
         nargs="+",
@@ -62,6 +75,7 @@ def main() -> None:
         max_tool_steps=args.max_tool_steps,
         max_new_tokens=args.max_new_tokens,
         modes=tuple(args.modes),
+        allow_non_heldout_seeds=args.allow_non_heldout_seeds,
     )
     output_path = Path(args.output_json)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,6 +94,7 @@ def evaluate_adapter(
     max_tool_steps: int,
     max_new_tokens: int,
     modes: tuple[str, ...] = EVAL_MODES,
+    allow_non_heldout_seeds: bool = False,
 ) -> dict[str, Any]:
     if not adapter_dir.exists():
         raise FileNotFoundError(f"Adapter directory not found: {adapter_dir}")
@@ -88,6 +103,11 @@ def evaluate_adapter(
     unknown_modes = [mode for mode in modes if mode not in EVAL_MODES]
     if unknown_modes:
         raise ValueError(f"Unknown modes: {', '.join(unknown_modes)}")
+    _validate_heldout_seed_band(
+        seed_start=seed_start,
+        episodes=episodes,
+        allow_non_heldout_seeds=allow_non_heldout_seeds,
+    )
 
     torch, tokenizer, model = _load_model(adapter_dir=adapter_dir, base_model=base_model)
 
@@ -96,6 +116,8 @@ def evaluate_adapter(
         "adapter": str(adapter_dir),
         "episodes_per_difficulty": episodes,
         "seed_start": seed_start,
+        "seed_policy": seed_policy_dict(),
+        "heldout_seed_enforced": not allow_non_heldout_seeds,
         "max_tool_steps": max_tool_steps,
         "max_new_tokens": max_new_tokens,
         "modes": list(modes),
@@ -136,6 +158,23 @@ def evaluate_adapter(
             ][:10]
         report["results"][difficulty] = difficulty_result
     return report
+
+
+def _validate_heldout_seed_band(
+    seed_start: int,
+    episodes: int,
+    allow_non_heldout_seeds: bool,
+) -> None:
+    if allow_non_heldout_seeds:
+        return
+
+    seed_stop = seed_start + episodes
+    if seed_start < HELDOUT_EVAL_BAND.start or seed_stop > HELDOUT_EVAL_BAND.stop:
+        raise ValueError(
+            "Held-out eval seeds must stay inside the official eval band "
+            f"{HELDOUT_EVAL_BAND.label}. "
+            "Pass --allow-non-heldout-seeds only for debugging."
+        )
 
 
 def _load_model(adapter_dir: Path, base_model: str):
