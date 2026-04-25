@@ -43,6 +43,12 @@ def test_validator_files_exist() -> None:
     assert Path("docs/experiment-lineage.md").exists()
     assert Path("docs/hard-only-grpo-reference-probe-results.md").exists()
     assert Path("docs/hard-only-grpo-reference-probe-metrics.json").exists()
+    assert Path("docs/replay-mix-sft-continuation-results.md").exists()
+    assert Path("docs/replay-mix-sft-continuation-metrics.json").exists()
+    assert Path("docs/hard-error-mining-results.md").exists()
+    assert Path("docs/hard-error-mining-metrics.json").exists()
+    assert Path("docs/hard-recall-micro-repair-results.md").exists()
+    assert Path("docs/hard-recall-micro-repair-metrics.json").exists()
 
 
 def test_pyproject_exposes_installable_space_package() -> None:

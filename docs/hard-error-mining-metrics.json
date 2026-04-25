@@ -1,0 +1,55 @@
+{
+  "job_id": "69ed04d2d70108f37acdec35",
+  "job_url": "https://huggingface.co/jobs/prodigyhuh/69ed04d2d70108f37acdec35",
+  "hardware": "a10g-large",
+  "adapter": "prodigyhuh/atomicvision-medium-fidelity-boost-lora",
+  "difficulty": "hard",
+  "episodes": 64,
+  "seed_band": "10000-10063",
+  "mode": "strict",
+  "summary": {
+    "mean_reward": 4.6412746875,
+    "baseline_mean_reward": 5.040389765625,
+    "mean_reward_delta_vs_baseline": -0.39911507812499997,
+    "worse_than_baseline_count": 9,
+    "issue_bucket_counts_when_worse_than_baseline": {
+      "missed_defects": 9
+    },
+    "action_pattern_counts": {
+      "prior_then_submit": 64
+    },
+    "top_negative_deltas": [
+      {
+        "seed": 10048,
+        "reward_delta_vs_baseline": -6.655504,
+        "issue_bucket": "missed_defects",
+        "action_pattern": "prior_then_submit"
+      },
+      {
+        "seed": 10013,
+        "reward_delta_vs_baseline": -4.635751,
+        "issue_bucket": "missed_defects",
+        "action_pattern": "prior_then_submit"
+      },
+      {
+        "seed": 10056,
+        "reward_delta_vs_baseline": -4.004633,
+        "issue_bucket": "missed_defects",
+        "action_pattern": "prior_then_submit"
+      },
+      {
+        "seed": 10047,
+        "reward_delta_vs_baseline": -3.80413,
+        "issue_bucket": "missed_defects",
+        "action_pattern": "prior_then_submit"
+      },
+      {
+        "seed": 10004,
+        "reward_delta_vs_baseline": -1.999701,
+        "issue_bucket": "missed_defects",
+        "action_pattern": "prior_then_submit"
+      }
+    ]
+  },
+  "verdict": "hard_recall_is_the_primary_remaining_weakness"
+}

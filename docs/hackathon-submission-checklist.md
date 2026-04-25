@@ -45,10 +45,12 @@ success on real seeds.
 ## Current Promotion Status
 
 - Best current checkpoint:
+  [prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora)
+- Previous best published base:
   [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
 - Stable fallback:
   [prodigyhuh/atomicvision-format-submit-merged-lora](https://huggingface.co/prodigyhuh/atomicvision-format-submit-merged-lora)
-- Hard frontier quality: still the main open gap
+- Hard frontier quality: improved, but still the main remaining optimization area
 
 ## Held-Out Seed Policy
 
@@ -61,7 +63,7 @@ success on real seeds.
 1. Run `training/evaluate_atomicvision_adapter.py` on the latest candidate with
    held-out seeds only.
 2. Freeze one final adapter and one final metrics table.
-3. If a new run does not beat the current best honestly, keep
-   `atomicvision-medium-fidelity-boost-lora` as the final promoted model.
+3. Keep `atomicvision-hard-recall-micro-boost-lora` as the final promoted model
+   unless a later held-out run beats it honestly.
 4. Publish the mini-blog or a short video.
 5. Add the external blog/video link to `README.md`.

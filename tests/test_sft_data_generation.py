@@ -10,8 +10,11 @@ from training.generate_atomicvision_sft_data import (
     build_arg_parser,
     build_cost_aware_sft_examples,
     build_format_refresh_examples,
+    build_hard_recall_micro_repair_examples,
+    build_hard_recall_repair_examples,
     build_hard_frontier_boost_examples,
     build_sft_examples,
+    build_strict_submit_contract_refresh_examples,
     build_strict_xml_submit_refresh_examples,
 )
 from training.seed_ranges import SFT_TRAIN_SEED_START
@@ -157,6 +160,67 @@ def test_hard_frontier_boost_examples_use_hard_scan_search() -> None:
     assert any(example["sample_type"] == "submit_after_reference" for example in examples)
 
 
+def test_hard_recall_repair_examples_focus_on_missing_defect_recovery() -> None:
+    examples = build_hard_recall_repair_examples(
+        examples_per_difficulty=16,
+        difficulties=("hard",),
+        seed_start=3600,
+        max_scan_candidates_per_difficulty=1024,
+    )
+
+    assert len(examples) == 16
+    counts = _counts_by_type(examples)
+    assert counts["submit_after_reference"] > counts["submit_prior"]
+    assert counts["submit_after_reference"] + counts["submit_prior"] == 16
+    assert {example["difficulty"] for example in examples} == {"hard"}
+
+    for example in examples:
+        assistant_calls = [
+            _parse_tool_call(message["content"])
+            for message in example["messages"]
+            if message["role"] == "assistant"
+        ]
+        if example["sample_type"] == "submit_after_reference":
+            assert [call["name"] for call in assistant_calls] == [
+                "ask_prior",
+                "compare_reference",
+                "submit_defect_map",
+            ]
+            assert example["missing_species_from_prior"]
+            assert example["reward_improvement"] >= 0.15
+        else:
+            assert [call["name"] for call in assistant_calls] == [
+                "ask_prior",
+                "submit_defect_map",
+            ]
+            assert example["oracle_reward_gap"] <= 0.50
+            assert set(example["prior_prediction"]["predicted_defects"]) == set(
+                _parse_tool_call(example["target_tool_call"])["arguments"]["predicted_defects"]
+            )
+
+
+def test_hard_recall_micro_repair_examples_use_narrow_confident_repair_mix() -> None:
+    examples = build_hard_recall_micro_repair_examples(
+        examples_per_difficulty=16,
+        difficulties=("hard",),
+        seed_start=3600,
+    )
+
+    assert len(examples) == 16
+    counts = _counts_by_type(examples)
+    assert counts == {
+        "submit_after_reference": 12,
+        "submit_prior": 4,
+    }
+    assert {example["difficulty"] for example in examples} == {"hard"}
+
+    for example in examples:
+        if example["sample_type"] != "submit_after_reference":
+            continue
+        assert 0.55 <= float(example["prior_confidence"]) <= 0.90
+        assert example["reward_improvement"] >= 0.25
+
+
 def test_format_refresh_examples_are_submit_heavy_and_reference_free() -> None:
     examples = build_format_refresh_examples(
         examples_per_difficulty=20,
@@ -218,6 +282,61 @@ def test_strict_xml_submit_refresh_examples_support_structured_tool_calls() -> N
         ]
         assert tool_names == ["ask_prior", "compare_reference", "submit_defect_map"]
         assert example["target_tool_call"].startswith("<tool_call>")
+
+
+def test_strict_submit_contract_refresh_examples_mix_simple_and_reference_submit_turns() -> None:
+    examples = build_strict_submit_contract_refresh_examples(
+        examples_per_difficulty=20,
+        difficulties=("hard",),
+        seed_start=3600,
+        max_scan_candidates_per_difficulty=512,
+    )
+
+    assert len(examples) == 20
+    assert _counts_by_type(examples) == {
+        "ask_prior": 1,
+        "submit_after_reference": 5,
+        "submit_prior": 14,
+    }
+    assert {example["difficulty"] for example in examples} == {"hard"}
+
+    reference_examples = [
+        example for example in examples if example["sample_type"] == "submit_after_reference"
+    ]
+    assert len(reference_examples) == 5
+    for example in reference_examples:
+        assistant_calls = [
+            _parse_tool_call(message["content"])
+            for message in example["messages"]
+            if message["role"] == "assistant"
+        ]
+        assert [call["name"] for call in assistant_calls] == [
+            "ask_prior",
+            "compare_reference",
+            "submit_defect_map",
+        ]
+        assert example["reward_improvement"] >= 0.10
+
+
+def test_strict_submit_contract_refresh_examples_support_structured_tool_calls() -> None:
+    examples = build_strict_submit_contract_refresh_examples(
+        examples_per_difficulty=8,
+        difficulties=("hard",),
+        seed_start=3600,
+        max_scan_candidates_per_difficulty=512,
+        structured_tool_calls=True,
+    )
+
+    assert len(examples) == 8
+    assistant_messages = [
+        message
+        for example in examples
+        for message in example["messages"]
+        if message["role"] == "assistant"
+    ]
+    assert assistant_messages
+    assert all(message.get("tool_calls") for message in assistant_messages)
+    assert all(message.get("content", "") == "" for message in assistant_messages)
 
 
 def test_sft_generator_cli_writes_scan_improvement_jsonl() -> None:
@@ -348,6 +467,121 @@ def test_sft_generator_cli_writes_format_refresh_jsonl() -> None:
         "submit_prior": 18,
     }
     assert {row["difficulty"] for row in rows} == {"hard"}
+
+
+def test_sft_generator_cli_writes_strict_submit_contract_refresh_jsonl() -> None:
+    output_path = Path(
+        f"outputs/test-sft-generator/atomicvision_strict_submit_contract_{os.getpid()}.jsonl"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "training/generate_atomicvision_sft_data.py",
+            "--profile",
+            "strict_submit_contract_refresh",
+            "--episodes-per-difficulty",
+            "20",
+            "--difficulties",
+            "hard",
+            "--seed-start",
+            "3600",
+            "--max-scan-candidates-per-difficulty",
+            "512",
+            "--output-jsonl",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+    assert "Wrote 20 examples" in completed.stdout
+    assert _counts_by_type(rows) == {
+        "ask_prior": 1,
+        "submit_after_reference": 5,
+        "submit_prior": 14,
+    }
+
+
+def test_sft_generator_cli_writes_hard_recall_repair_jsonl() -> None:
+    output_path = Path(
+        f"outputs/test-sft-generator/atomicvision_hard_recall_repair_{os.getpid()}.jsonl"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "training/generate_atomicvision_sft_data.py",
+            "--profile",
+            "hard_recall_repair",
+            "--episodes-per-difficulty",
+            "16",
+            "--difficulties",
+            "hard",
+            "--seed-start",
+            "3600",
+            "--max-scan-candidates-per-difficulty",
+            "1024",
+            "--output-jsonl",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+    assert "Wrote 16 examples" in completed.stdout
+    counts = _counts_by_type(rows)
+    assert counts["submit_after_reference"] > counts["submit_prior"]
+    assert counts["submit_after_reference"] + counts["submit_prior"] == 16
+    assert all(row["difficulty"] == "hard" for row in rows)
+    assert "Warning: fewer scan-improvement examples were found than requested" not in completed.stdout
+
+
+def test_sft_generator_cli_writes_hard_recall_micro_repair_jsonl() -> None:
+    output_path = Path(
+        f"outputs/test-sft-generator/atomicvision_hard_recall_micro_{os.getpid()}.jsonl"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "training/generate_atomicvision_sft_data.py",
+            "--profile",
+            "hard_recall_micro_repair",
+            "--episodes-per-difficulty",
+            "16",
+            "--difficulties",
+            "hard",
+            "--seed-start",
+            "3600",
+            "--output-jsonl",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+    assert "Wrote 16 examples" in completed.stdout
+    assert _counts_by_type(rows) == {
+        "submit_after_reference": 12,
+        "submit_prior": 4,
+    }
+    reference_rows = [row for row in rows if row["sample_type"] == "submit_after_reference"]
+    assert reference_rows
+    assert all(0.55 <= float(row["prior_confidence"]) <= 0.90 for row in reference_rows)
+    assert all(float(row["reward_improvement"]) >= 0.25 for row in reference_rows)
 
 
 def _parse_tool_call(text: str) -> dict:

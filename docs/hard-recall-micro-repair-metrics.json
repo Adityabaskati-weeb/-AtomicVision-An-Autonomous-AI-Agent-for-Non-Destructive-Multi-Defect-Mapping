@@ -1,0 +1,70 @@
+{
+  "job_id": "69ed269fd70108f37acdef6d",
+  "job_url": "https://huggingface.co/jobs/prodigyhuh/69ed269fd70108f37acdef6d",
+  "hardware": "a10g-large",
+  "base_adapter": "prodigyhuh/atomicvision-medium-fidelity-boost-lora",
+  "profile": "hard_recall_micro_repair",
+  "dataset_counts": {
+    "submit_after_reference": 12,
+    "submit_prior": 4
+  },
+  "episodes_per_difficulty": 16,
+  "eval_episodes": 32,
+  "seed_start": 3600,
+  "eval_seed_start": 10000,
+  "learning_rate": 1e-06,
+  "max_updates": 4,
+  "winning_checkpoint": "checkpoint-1",
+  "promotion_target_repo": "prodigyhuh/atomicvision-hard-recall-micro-boost-lora",
+  "promotion_publish_job_id": "69ed3080d70108f37acdf026",
+  "promotion_publish_job_url": "https://huggingface.co/jobs/prodigyhuh/69ed3080d70108f37acdf026",
+  "promotion_publish_status": "failed_pending_new_token",
+  "promotion_publish_error": "403 Forbidden on the Hugging Face LFS batch endpoint while uploading the adapter",
+  "candidates": {
+    "base": {
+      "medium_reward": 4.50648265625,
+      "medium_f1": 0.789137,
+      "hard_reward": 4.69171921875,
+      "hard_f1": 0.81621578125,
+      "strict_tool_call_pass_rate": 1.0,
+      "normalized_tool_call_pass_rate": 1.0,
+      "tool_failure_rate": 0.0,
+      "done_rate": 1.0
+    },
+    "checkpoint-1": {
+      "medium_reward": 4.50648265625,
+      "medium_f1": 0.789137,
+      "hard_reward": 4.714775875,
+      "hard_f1": 0.8206800937500001,
+      "strict_tool_call_pass_rate": 1.0,
+      "normalized_tool_call_pass_rate": 1.0,
+      "tool_failure_rate": 0.0,
+      "done_rate": 1.0,
+      "medium_reward_delta_vs_base": 0.0,
+      "medium_f1_delta_vs_base": 0.0,
+      "hard_reward_delta_vs_base": 0.02305665624999964,
+      "hard_f1_delta_vs_base": 0.004464312500000012
+    },
+    "checkpoint-2": {
+      "medium_reward": 4.4157215,
+      "medium_f1": 0.779762,
+      "hard_reward": 4.69171921875,
+      "hard_f1": 0.81621578125,
+      "strict_tool_call_pass_rate": 1.0,
+      "normalized_tool_call_pass_rate": 1.0,
+      "tool_failure_rate": 0.0,
+      "done_rate": 1.0
+    },
+    "checkpoint-4": {
+      "medium_reward": 4.50648265625,
+      "medium_f1": 0.789137,
+      "hard_reward": 4.69171921875,
+      "hard_f1": 0.81621578125,
+      "strict_tool_call_pass_rate": 1.0,
+      "normalized_tool_call_pass_rate": 1.0,
+      "tool_failure_rate": 0.0,
+      "done_rate": 1.0
+    }
+  },
+  "verdict": "checkpoint_1_is_the_first_targeted_hard_recall_increment_and_is_the_best_measured_checkpoint_but_hub_materialization_is_blocked_by_lfs_permissions"
+}

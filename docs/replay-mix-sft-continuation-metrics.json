@@ -1,0 +1,44 @@
+{
+  "job_id": "69ece95ad70108f37acde9ce",
+  "job_url": "https://huggingface.co/jobs/prodigyhuh/69ece95ad70108f37acde9ce",
+  "hardware": "a10g-large",
+  "base_adapter": "prodigyhuh/atomicvision-medium-fidelity-boost-lora",
+  "data_mix": {
+    "medium_profile": "cost_aware",
+    "hard_profile": "hard_frontier_boost",
+    "updates": 6,
+    "learning_rate": 2e-06,
+    "eval_seed_band": "10000-10999"
+  },
+  "base_metrics": {
+    "medium_reward": 4.50648265625,
+    "medium_f1": 0.789137,
+    "hard_reward": 4.69171921875,
+    "hard_f1": 0.81621578125,
+    "strict_tool_call_pass_rate": 1.0,
+    "normalized_tool_call_pass_rate": 1.0,
+    "tool_failure_rate": 0.0,
+    "done_rate": 1.0
+  },
+  "new_metrics": {
+    "medium_reward": 4.50648265625,
+    "medium_f1": 0.789137,
+    "hard_reward": 4.657461875,
+    "hard_f1": 0.81323959375,
+    "strict_tool_call_pass_rate": 1.0,
+    "normalized_tool_call_pass_rate": 1.0,
+    "tool_failure_rate": 0.0,
+    "done_rate": 1.0
+  },
+  "delta_metrics": {
+    "medium_reward": 0.0,
+    "medium_f1": 0.0,
+    "hard_reward": -0.03425734375,
+    "hard_f1": -0.0029761875,
+    "strict_tool_call_pass_rate": 0.0,
+    "normalized_tool_call_pass_rate": 0.0,
+    "tool_failure_rate": 0.0,
+    "done_rate": 0.0
+  },
+  "verdict": "stable_but_not_promoted"
+}

@@ -7,10 +7,14 @@ were trying to fix, and which one is currently the best base for future work.
 
 | Role | Adapter | Status | Why it matters |
 | --- | --- | --- | --- |
-| Best current checkpoint | [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora) | Promoted | Preserves perfect strict execution and improves the medium held-out slice |
+| Best published adapter | [prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora) | Current published best | Published `checkpoint-1` winner that improves held-out hard quality while keeping medium and strict execution flat |
+| Previous best published adapter | [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora) | Preserved parent/base | Strong, stable base that solved the medium slice and served as the parent of the hard-recall winner |
 | Stable fallback | [prodigyhuh/atomicvision-format-submit-merged-lora](https://huggingface.co/prodigyhuh/atomicvision-format-submit-merged-lora) | Preserved | Recovery-safe adapter with reliable two-step tool behavior |
 | Hard-frontier SFT experiment | [prodigyhuh/atomicvision-hard-frontier-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-frontier-boost-lora) | Not promoted | Stayed reliable but did not improve the hard slice |
 | Hard-only GRPO probe | `atomicvision-hard-only-grpo-reference-probe` | Completed, not promoted | Produced real reward variance but still failed strict submit behavior |
+| Replay-mix SFT continuation | `replay-mix-sft-continuation` | Completed, not promoted | Preserved perfect execution but did not beat the current best on held-out hard quality |
+| Hard error mining diagnostic | `hard-error-mining` | Completed, informative | Showed that hard regressions are dominated by missed defects after `ask_prior -> submit` |
+| Hard recall micro repair | `hard-recall-micro-repair` | Completed, measured winner | First checkpoint sweep in this family to identify an early, real hard-slice increment (`checkpoint-1`) |
 
 ## What Each Stage Solved
 
@@ -79,6 +83,69 @@ Primary artifacts:
 - [hard-only-grpo-reference-probe-results.md](hard-only-grpo-reference-probe-results.md)
 - [hard-only-grpo-reference-probe-metrics.json](hard-only-grpo-reference-probe-metrics.json)
 
+### 5. Replay-mix SFT continuation
+
+Goal:
+
+- keep the strict execution recovered by earlier SFT
+- reuse the only previously helpful medium replay path
+- add a smaller hard slice without over-correcting into hard-only drift
+
+Result:
+
+- strict and normalized execution stayed perfect
+- medium stayed flat
+- hard regressed slightly on held-out evaluation
+
+Primary artifacts:
+
+- [replay-mix-sft-continuation-results.md](replay-mix-sft-continuation-results.md)
+- [replay-mix-sft-continuation-metrics.json](replay-mix-sft-continuation-metrics.json)
+
+### 6. Hard error mining
+
+Goal:
+
+- identify the real scientific error mode on held-out hard seeds
+- separate hard semantic misses from formatting or execution failures
+
+Result:
+
+- the main remaining weakness is missed defects
+- the dominant action path is still `ask_prior -> submit_defect_map`
+- this points to a hard-recall bottleneck, not a verifier or XML bottleneck
+
+Primary artifacts:
+
+- [hard-error-mining-results.md](hard-error-mining-results.md)
+- [hard-error-mining-metrics.json](hard-error-mining-metrics.json)
+
+### 7. Hard recall micro repair
+
+Goal:
+
+- respond directly to the hard-error mining result
+- improve missed-defect recall on held-out hard seeds
+- keep medium quality and strict execution flat
+
+Result:
+
+- `checkpoint-1` improved hard reward and hard F1 over the previous best
+- medium quality stayed unchanged
+- strict and normalized execution stayed perfect
+
+Primary artifacts:
+
+- [hard-recall-micro-repair-results.md](hard-recall-micro-repair-results.md)
+- [hard-recall-micro-repair-metrics.json](hard-recall-micro-repair-metrics.json)
+
+Publication note:
+
+- the winning checkpoint is now published at
+  [prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora)
+- this is the promoted Hub materialization of `checkpoint-1` from the hard
+  recall micro-repair run
+
 ## Promotion Rule
 
 An adapter is promoted only if:
@@ -89,6 +156,10 @@ An adapter is promoted only if:
 4. hard reward improves materially,
 5. medium does not regress beyond tolerance.
 
-Until then, the best current base remains:
+The current best published adapter is:
+
+- [prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora)
+
+The previous best published base remains available at:
 
 - [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)

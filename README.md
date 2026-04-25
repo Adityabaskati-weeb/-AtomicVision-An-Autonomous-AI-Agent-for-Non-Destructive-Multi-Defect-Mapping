@@ -24,7 +24,9 @@ accuracy against scan cost.
 - Theme fit: `Theme #3.1 - World Modeling / Professional Tasks`
 - Hugging Face Space: [prodigyhuh/atomicvision-openenv](https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv)
 - Public app host: [prodigyhuh-atomicvision-openenv.hf.space](https://prodigyhuh-atomicvision-openenv.hf.space)
-- Best held-out adapter: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
+- Best published adapter: [prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora)
+- Winning promotion run: [docs/hard-recall-micro-repair-results.md](docs/hard-recall-micro-repair-results.md) (`checkpoint-1`, now published)
+- Previous best adapter: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
 - Stable fallback adapter: [prodigyhuh/atomicvision-format-submit-merged-lora](https://huggingface.co/prodigyhuh/atomicvision-format-submit-merged-lora)
 - Judge repro notebook: [notebooks/AtomicVision_Judge_Repro_Colab.ipynb](notebooks/AtomicVision_Judge_Repro_Colab.ipynb) - full rebuild, saved-adapter continuation, and hard-frontier booster
 - Open in Colab: [AtomicVision Judge Repro Colab](https://colab.research.google.com/github/Adityabaskati-weeb/-AtomicVision-An-Autonomous-AI-Agent-for-Non-Destructive-Multi-Defect-Mapping/blob/main/notebooks/AtomicVision_Judge_Repro_Colab.ipynb)
@@ -187,9 +189,25 @@ agent:
 ### Results
 
 The current best published adapter is
-[prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora).
-It improved the medium held-out slice while preserving perfect strict tool-call
-execution. The remaining gap is hard-case quality, not environment stability.
+[prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora).
+It is the published `checkpoint-1` winner from the
+[hard-recall micro-repair run](docs/hard-recall-micro-repair-results.md).
+
+Final held-out strict comparison versus the previous best published adapter:
+
+| Metric | Previous best | Current best | Delta |
+| --- | ---: | ---: | ---: |
+| `medium_reward` | `4.5065` | `4.5065` | `0.0000` |
+| `medium_f1` | `0.7891` | `0.7891` | `0.0000` |
+| `hard_reward` | `4.6917` | `4.7148` | `+0.0231` |
+| `hard_f1` | `0.8162` | `0.8207` | `+0.0045` |
+| `strict_tool_call_pass_rate` | `1.00` | `1.00` | `0.00` |
+| `normalized_tool_call_pass_rate` | `1.00` | `1.00` | `0.00` |
+| `tool_failure_rate` | `0.00` | `0.00` | `0.00` |
+| `done_rate` | `1.00` | `1.00` | `0.00` |
+
+So the final promoted model improved the hard slice without regressing medium or
+breaking execution.
 
 ### Why It Matters
 
@@ -202,6 +220,8 @@ hackathon submission and as a research sandbox for tool-using agents.
 
 - Latest GRPO probe writeup: [docs/hard-only-grpo-reference-probe-results.md](docs/hard-only-grpo-reference-probe-results.md)
 - Latest GRPO probe metrics JSON: [docs/hard-only-grpo-reference-probe-metrics.json](docs/hard-only-grpo-reference-probe-metrics.json)
+- Latest hard-recall micro-repair writeup: [docs/hard-recall-micro-repair-results.md](docs/hard-recall-micro-repair-results.md)
+- Latest hard-recall micro-repair metrics JSON: [docs/hard-recall-micro-repair-metrics.json](docs/hard-recall-micro-repair-metrics.json)
 - Latest HF Jobs probe run:
   [job 69ec694ad2c8bd8662bcd2d2](https://huggingface.co/jobs/prodigyhuh/69ec694ad2c8bd8662bcd2d2)
 - Mini-blog draft: [docs/hackathon-mini-blog-draft.md](docs/hackathon-mini-blog-draft.md)
@@ -228,7 +248,8 @@ previous gate has been validated.
 - Phase 14: Held-Out Evaluation And GRPO Roadmap
 - Phase 15: NaN-Safe SFT Recovery
 - Phase 16: Format-Repair And Two-Step Curriculum
-- Status: the current best promoted adapter is
+- Status: the current best published adapter is
+  `atomicvision-hard-recall-micro-boost-lora`; the previous best base is
   `atomicvision-medium-fidelity-boost-lora`; the stable fallback is
   `atomicvision-format-submit-merged-lora`; held-out evaluation now uses the
   official eval-only seed band before any new promotion decision

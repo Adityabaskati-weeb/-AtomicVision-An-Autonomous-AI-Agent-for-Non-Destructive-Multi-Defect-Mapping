@@ -11,7 +11,8 @@ actions, and submits a final defect map under scan-budget pressure.
 - NaN-safe SFT trainer: [training/train_sft_atomicvision_safe.py](../training/train_sft_atomicvision_safe.py)
 - Held-out evaluator: [training/evaluate_atomicvision_adapter.py](../training/evaluate_atomicvision_adapter.py)
 - Adapter publisher: [training/publish_adapter_to_hub.py](../training/publish_adapter_to_hub.py)
-- Current best adapter: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
+- Current best adapter: [prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora)
+- Previous best adapter: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
 - Stable fallback adapter: [prodigyhuh/atomicvision-format-submit-merged-lora](https://huggingface.co/prodigyhuh/atomicvision-format-submit-merged-lora)
 
 ## Why this project fits the hackathon
@@ -42,22 +43,26 @@ That led to the current recovery path:
 
 ## Current Best Result
 
-The current best published checkpoint is the medium-fidelity boost adapter:
+The current best published checkpoint is the hard-recall micro-boost adapter:
 
-- model repo: [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora)
-- training style: small continuation SFT from the saved reliable adapter
-- goal: improve outcome quality without disturbing perfect tool-call execution
+- model repo: [prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora)
+- training style: tiny targeted SFT continuation from the previous best
+- goal: improve missed-defect recall on held-out hard seeds without disturbing
+  perfect tool-call execution
 
-Held-out result summary:
+Held-out strict comparison versus the previous best published adapter:
 
-| Difficulty | Baseline reward | Boost reward | Strict pass | Done rate |
-| --- | ---: | ---: | ---: | ---: |
-| medium | 4.5115 | 4.5707 | 1.00 | 1.00 |
-| hard | 4.8883 | 4.6466 | 1.00 | 1.00 |
+| Metric | Previous best | Current best | Delta |
+| --- | ---: | ---: | ---: |
+| medium reward | 4.5065 | 4.5065 | 0.0000 |
+| medium F1 | 0.7891 | 0.7891 | 0.0000 |
+| hard reward | 4.6917 | 4.7148 | +0.0231 |
+| hard F1 | 0.8162 | 0.8207 | +0.0045 |
+| strict pass | 1.00 | 1.00 | 0.00 |
+| done rate | 1.00 | 1.00 | 0.00 |
 
-That is the important shape of progress for this project: the interface layer
-is now reliable, the medium slice improved, and the remaining gap is hard-case
-quality rather than formatting.
+That is the important shape of final progress for this project: the interface
+layer stayed perfect, medium did not regress, and the hard slice improved.
 
 ## Held-Out Seed Policy
 
