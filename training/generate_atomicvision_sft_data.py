@@ -51,6 +51,10 @@ FORMAT_REFRESH_REFERENCE_RATIO = 0.0
 STRICT_XML_SUBMIT_REFRESH_MIN_SCAN_IMPROVEMENT = 0.10
 STRICT_XML_SUBMIT_REFRESH_MAX_SCAN_CANDIDATES = 2048
 STRICT_SUBMIT_CONTRACT_REFERENCE_FRACTION = 0.25
+HARD_RECALL_GOOD_PRIOR_FRACTION = 0.35
+HARD_RECALL_MIN_SCAN_IMPROVEMENT = 0.15
+HARD_RECALL_MAX_SCAN_CANDIDATES = 4096
+HARD_RECALL_MAX_ORACLE_GAP = 0.50
 HARD_FRONTIER_SUBMIT_PRIOR_RATIO = 0.85
 HARD_FRONTIER_REFERENCE_RATIO = 0.10
 HARD_FRONTIER_MIN_SCAN_IMPROVEMENT = 0.15
@@ -310,6 +314,61 @@ def build_strict_submit_contract_refresh_examples(
     return examples
 
 
+def build_hard_recall_repair_examples(
+    examples_per_difficulty: int,
+    difficulties: tuple[str, ...] = ("hard",),
+    seed_start: int = 0,
+    good_prior_fraction: float = HARD_RECALL_GOOD_PRIOR_FRACTION,
+    min_scan_improvement: float = HARD_RECALL_MIN_SCAN_IMPROVEMENT,
+    max_scan_candidates_per_difficulty: int | None = HARD_RECALL_MAX_SCAN_CANDIDATES,
+    max_oracle_gap_for_submit: float = HARD_RECALL_MAX_ORACLE_GAP,
+    structured_tool_calls: bool = False,
+) -> list[dict[str, Any]]:
+    """Build a hard-only repair set for missed-defect recall failures.
+
+    This profile teaches a sharp contrast:
+    - if the prior already covers the full defect set and is near-oracle, submit it
+    - if the prior misses species and compare_reference materially helps, use it before submit
+    """
+
+    if examples_per_difficulty <= 0:
+        raise ValueError("examples_per_difficulty must be positive")
+    if not 0.0 <= good_prior_fraction <= 1.0:
+        raise ValueError("good_prior_fraction must be between 0 and 1")
+
+    good_prior_examples = int(round(examples_per_difficulty * good_prior_fraction))
+    if examples_per_difficulty >= 4:
+        good_prior_examples = max(1, good_prior_examples)
+    good_prior_examples = min(good_prior_examples, examples_per_difficulty)
+    recall_repair_examples = examples_per_difficulty - good_prior_examples
+
+    examples: list[dict[str, Any]] = []
+    for difficulty in difficulties:
+        if recall_repair_examples > 0:
+            examples.extend(
+                build_missing_defect_recovery_examples(
+                    target_examples=recall_repair_examples,
+                    difficulty=difficulty,
+                    seed_start=seed_start,
+                    min_scan_improvement=min_scan_improvement,
+                    max_candidate_seeds=max_scan_candidates_per_difficulty,
+                    structured_tool_calls=structured_tool_calls,
+                )
+            )
+        if good_prior_examples > 0:
+            examples.extend(
+                build_good_prior_submit_examples(
+                    target_examples=good_prior_examples,
+                    difficulty=difficulty,
+                    seed_start=seed_start,
+                    max_candidate_seeds=max_scan_candidates_per_difficulty,
+                    max_oracle_gap=max_oracle_gap_for_submit,
+                    structured_tool_calls=structured_tool_calls,
+                )
+            )
+    return examples
+
+
 def _planned_reference_examples_per_difficulty(
     examples_per_difficulty: int,
     submit_prior_ratio: float,
@@ -334,6 +393,18 @@ def _planned_strict_submit_contract_reference_examples_per_difficulty(
     if examples_per_difficulty >= 4:
         reference_examples = max(1, reference_examples)
     return min(reference_examples, examples_per_difficulty)
+
+
+def _planned_good_prior_examples_per_difficulty(
+    examples_per_difficulty: int,
+    good_prior_fraction: float,
+) -> int:
+    """Mirror the good-prior count math for hard recall repair."""
+
+    good_prior_examples = int(round(examples_per_difficulty * good_prior_fraction))
+    if examples_per_difficulty >= 4:
+        good_prior_examples = max(1, good_prior_examples)
+    return min(good_prior_examples, examples_per_difficulty)
 
 
 def _expected_scan_examples(args: argparse.Namespace) -> int:
@@ -403,6 +474,14 @@ def _expected_scan_examples(args: argparse.Namespace) -> int:
             args.episodes_per_difficulty,
             args.reference_fraction,
         ) * difficulties
+    if args.profile == "hard_recall_repair":
+        return (
+            args.episodes_per_difficulty
+            - _planned_good_prior_examples_per_difficulty(
+                args.episodes_per_difficulty,
+                HARD_RECALL_GOOD_PRIOR_FRACTION,
+            )
+        ) * difficulties
     if args.profile == "strict_xml_submit_refresh":
         return args.episodes_per_difficulty * difficulties
     if args.profile == "two_step_curriculum":
@@ -466,6 +545,111 @@ def build_strict_xml_submit_refresh_examples(
                 )
             examples.append(example)
     return examples
+
+
+def build_good_prior_submit_examples(
+    target_examples: int,
+    difficulty: str = "hard",
+    seed_start: int = 0,
+    max_candidate_seeds: int | None = None,
+    max_oracle_gap: float = HARD_RECALL_MAX_ORACLE_GAP,
+    structured_tool_calls: bool = False,
+) -> list[dict[str, Any]]:
+    """Build submit-prior rows only where the prior is already near-oracle."""
+
+    if target_examples <= 0:
+        raise ValueError("target_examples must be positive")
+    if max_oracle_gap < 0.0:
+        raise ValueError("max_oracle_gap must be non-negative")
+
+    search_limit = max_candidate_seeds or max(64, target_examples * 32)
+    examples: list[dict[str, Any]] = []
+    for seed in range(seed_start, seed_start + search_limit):
+        example = build_good_prior_submit_example(
+            seed=seed,
+            difficulty=difficulty,
+            max_oracle_gap=max_oracle_gap,
+            structured_tool_calls=structured_tool_calls,
+        )
+        if example is None:
+            continue
+        examples.append(example)
+        if len(examples) >= target_examples:
+            break
+    return examples
+
+
+def build_good_prior_submit_example(
+    seed: int,
+    difficulty: str = "hard",
+    max_oracle_gap: float = HARD_RECALL_MAX_ORACLE_GAP,
+    structured_tool_calls: bool = False,
+) -> dict[str, Any] | None:
+    """Build one submit-prior example where the prior is already near-oracle."""
+
+    env = AtomicVisionEnvironment(difficulty=difficulty)
+    initial_observation = env.reset(seed=seed)
+    initial_text = _format_observation(initial_observation.model_dump())
+    initial_user = _user_message(initial_text)
+    prior_observation = env.step(AtomicVisionAction(action_type="ask_prior"))
+    prior_text = _format_observation(prior_observation.model_dump())
+    prior = prior_observation.prior_prediction
+    prior_args = _submit_args_from_prior(prior)
+    case = env._require_case()
+
+    truth_species = [defect.species for defect in case.defects]
+    truth_species_set = set(truth_species)
+    prior_species_set = set(prior_args["predicted_defects"])
+    if prior_species_set != truth_species_set:
+        return None
+
+    prior_score = score_submission(
+        case,
+        prior_args["predicted_defects"],
+        prior_args["predicted_concentrations"],
+        confidence=prior_args["confidence"],
+        scan_cost=1.5,
+    )
+    oracle_args = _submit_args_from_case(case)
+    oracle_score = score_submission(
+        case,
+        oracle_args["predicted_defects"],
+        oracle_args["predicted_concentrations"],
+        confidence=oracle_args["confidence"],
+        scan_cost=1.5,
+    )
+    oracle_gap = float(oracle_score.total_reward - prior_score.total_reward)
+    if oracle_gap > max_oracle_gap:
+        return None
+
+    submit_call = {"name": "submit_defect_map", "arguments": prior_args}
+    submit_text = _tool_call_text(submit_call)
+    return {
+        "sample_id": f"{difficulty}-{seed}-good_prior_submit",
+        "sample_type": "submit_prior",
+        "target_tool_name": "submit_defect_map",
+        "target_tool_call": submit_text,
+        "seed": seed,
+        "difficulty": difficulty,
+        "prior_prediction": _model_dump(prior),
+        "expected_reward": prior_score.total_reward,
+        "expected_reward_breakdown": {},
+        "expected_scan_cost": 1.5,
+        "oracle_reward_gap": round(oracle_gap, 6),
+        "messages": [
+            {"role": "system", "content": TOOL_SYSTEM},
+            {"role": "user", "content": initial_user},
+            _assistant_tool_message(
+                ASK_PRIOR_CALL,
+                structured_tool_calls=structured_tool_calls,
+            ),
+            {"role": "user", "content": _tool_response(prior_text)},
+            _assistant_tool_message(
+                submit_call,
+                structured_tool_calls=structured_tool_calls,
+            ),
+        ],
+    }
 
 
 def build_episode_examples(
@@ -580,6 +764,38 @@ def build_scan_improvement_examples(
     return examples
 
 
+def build_missing_defect_recovery_examples(
+    target_examples: int,
+    difficulty: str = "hard",
+    seed_start: int = 0,
+    min_scan_improvement: float = HARD_RECALL_MIN_SCAN_IMPROVEMENT,
+    max_candidate_seeds: int | None = None,
+    structured_tool_calls: bool = False,
+) -> list[dict[str, Any]]:
+    """Build compare_reference recovery rows where the prior misses species."""
+
+    if target_examples <= 0:
+        raise ValueError("target_examples must be positive")
+    if min_scan_improvement < 0.0:
+        raise ValueError("min_scan_improvement must be non-negative")
+
+    search_limit = max_candidate_seeds or max(64, target_examples * 32)
+    examples: list[dict[str, Any]] = []
+    for seed in range(seed_start, seed_start + search_limit):
+        example = build_missing_defect_recovery_example(
+            seed=seed,
+            difficulty=difficulty,
+            min_scan_improvement=min_scan_improvement,
+            structured_tool_calls=structured_tool_calls,
+        )
+        if example is None:
+            continue
+        examples.append(example)
+        if len(examples) >= target_examples:
+            break
+    return examples
+
+
 def build_scan_improvement_example(
     seed: int,
     difficulty: str = "medium",
@@ -650,6 +866,86 @@ def build_scan_improvement_example(
             ),
             {"role": "user", "content": _tool_response(reference_response)},
             _assistant_tool_message(submit_call, structured_tool_calls=structured_tool_calls),
+        ],
+    }
+
+
+def build_missing_defect_recovery_example(
+    seed: int,
+    difficulty: str = "hard",
+    min_scan_improvement: float = HARD_RECALL_MIN_SCAN_IMPROVEMENT,
+    structured_tool_calls: bool = False,
+) -> dict[str, Any] | None:
+    """Build one reference-then-submit example where the prior misses defects."""
+
+    env = AtomicVisionEnvironment(difficulty=difficulty)
+    initial_observation = env.reset(seed=seed)
+    initial_text = _format_observation(initial_observation.model_dump())
+    initial_user = _user_message(initial_text)
+
+    prior_observation = env.step(AtomicVisionAction(action_type="ask_prior"))
+    prior_text = _format_observation(prior_observation.model_dump())
+    prior = prior_observation.prior_prediction
+    prior_args = _submit_args_from_prior(prior)
+    case = env._require_case()
+    truth_species = [defect.species for defect in case.defects]
+    missing_species = sorted(set(truth_species) - set(prior_args["predicted_defects"]))
+    if not missing_species:
+        return None
+
+    prior_score = score_submission(
+        case,
+        prior_args["predicted_defects"],
+        prior_args["predicted_concentrations"],
+        confidence=prior_args["confidence"],
+        scan_cost=1.5,
+    )
+
+    reference_observation = env.step(AtomicVisionAction(action_type="compare_reference"))
+    reference_response = _format_observation(reference_observation.model_dump())
+    submit_args = _submit_args_from_case(case)
+    final_observation = env.step(
+        AtomicVisionAction(
+            action_type="submit_defect_map",
+            predicted_defects=submit_args["predicted_defects"],
+            predicted_concentrations=submit_args["predicted_concentrations"],
+            confidence=submit_args["confidence"],
+        )
+    )
+    reward_improvement = float(final_observation.reward or 0.0) - prior_score.total_reward
+    if reward_improvement < min_scan_improvement:
+        return None
+
+    submit_call = {"name": "submit_defect_map", "arguments": submit_args}
+    return {
+        "sample_id": f"{difficulty}-{seed}-missing_defect_recovery",
+        "sample_type": SCAN_SAMPLE_TYPE,
+        "target_tool_name": "submit_defect_map",
+        "target_tool_call": _tool_call_text(submit_call),
+        "seed": seed,
+        "difficulty": difficulty,
+        "prior_prediction": _model_dump(prior),
+        "prior_expected_reward": prior_score.total_reward,
+        "expected_reward": float(final_observation.reward or 0.0),
+        "reward_improvement": round(reward_improvement, 6),
+        "expected_reward_breakdown": final_observation.reward_breakdown or {},
+        "expected_scan_cost": float(env.state.total_scan_cost),
+        "oracle_defect_map": _submit_args_from_case(case),
+        "missing_species_from_prior": missing_species,
+        "messages": [
+            {"role": "system", "content": TOOL_SYSTEM},
+            {"role": "user", "content": initial_user},
+            _assistant_tool_message(ASK_PRIOR_CALL, structured_tool_calls=structured_tool_calls),
+            {"role": "user", "content": _tool_response(prior_text)},
+            _assistant_tool_message(
+                COMPARE_REFERENCE_CALL,
+                structured_tool_calls=structured_tool_calls,
+            ),
+            {"role": "user", "content": _tool_response(reference_response)},
+            _assistant_tool_message(
+                submit_call,
+                structured_tool_calls=structured_tool_calls,
+            ),
         ],
     }
 
@@ -742,6 +1038,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "cost_aware",
             "format_repair",
             "format_refresh",
+            "hard_recall_repair",
             "strict_submit_contract_refresh",
             "strict_xml_submit_refresh",
             "submit_bridge",
@@ -755,6 +1052,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "format_repair creates a held-out repair mix with many more "
             "first-step ask_prior rows. format_refresh creates a tiny "
             "submit-heavy strict-envelope refresh set before GRPO. "
+            "hard_recall_repair teaches the model to submit immediately only "
+            "when the prior is already near-oracle, and to use "
+            "compare_reference when the prior misses species. "
             "strict_submit_contract_refresh combines that submit-heavy "
             "refresh with a smaller batch of hard/reference-improvement "
             "final submit turns from the GRPO failure pool. "
@@ -902,6 +1202,23 @@ def main() -> None:
             submit_prior_ratio=FORMAT_REFRESH_SUBMIT_PRIOR_RATIO,
             min_scan_improvement=min_scan_improvement,
             max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+            structured_tool_calls=args.assistant_tool_format == "structured",
+        )
+    elif args.profile == "hard_recall_repair":
+        min_scan_improvement = args.min_scan_improvement
+        max_scan_candidates_per_difficulty = args.max_scan_candidates_per_difficulty
+        if min_scan_improvement == 0.25:
+            min_scan_improvement = HARD_RECALL_MIN_SCAN_IMPROVEMENT
+        if max_scan_candidates_per_difficulty is None:
+            max_scan_candidates_per_difficulty = HARD_RECALL_MAX_SCAN_CANDIDATES
+        examples = build_hard_recall_repair_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            good_prior_fraction=HARD_RECALL_GOOD_PRIOR_FRACTION,
+            min_scan_improvement=min_scan_improvement,
+            max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+            max_oracle_gap_for_submit=HARD_RECALL_MAX_ORACLE_GAP,
             structured_tool_calls=args.assistant_tool_format == "structured",
         )
     elif args.profile == "strict_xml_submit_refresh":
