@@ -216,6 +216,53 @@ def test_repair_tool_call_recovers_shorthand_ask_prior() -> None:
     )
 
 
+def test_parser_strips_empty_leading_qwen_think_wrapper() -> None:
+    transcript = "\n".join(
+        [
+            "assistant",
+            "<think>",
+            "",
+            "</think>",
+            "",
+            '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call>',
+        ]
+    )
+
+    assert parse_strict_tool_call(transcript) == {
+        "name": "ask_prior",
+        "arguments": {},
+    }
+    assert parse_terminal_strict_tool_call(transcript) == {
+        "name": "ask_prior",
+        "arguments": {},
+    }
+    assert repair_tool_call(transcript) == {
+        "name": "ask_prior",
+        "arguments": {},
+    }
+    assert canonicalize_tool_call_text(transcript) == (
+        '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call>'
+    )
+
+
+def test_parser_strips_empty_im_start_assistant_think_wrapper() -> None:
+    transcript = (
+        "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        '<tool_call>{"name":"submit_defect_map","arguments":{"predicted_defects":["Zn"],'
+        '"predicted_concentrations":[0.19],"confidence":0.65}}</tool_call>'
+    )
+
+    assert parse_strict_tool_call(transcript) == {
+        "name": "submit_defect_map",
+        "arguments": {
+            "predicted_defects": ["Zn"],
+            "predicted_concentrations": [0.19],
+            "confidence": 0.65,
+        },
+    }
+    assert _tool_call_format_reward(transcript) == VALID_TOOL_CALL_FORMAT_REWARD
+
+
 def test_repair_tool_call_recovers_submit_from_defect_map_payload() -> None:
     call = repair_tool_call(
         "\n".join(
