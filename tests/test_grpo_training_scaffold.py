@@ -76,7 +76,8 @@ def test_tool_system_prompt_uses_explicit_schema_examples() -> None:
     assert '"name":"ask_prior"' in TOOL_SYSTEM_PROMPT
     assert '"name":"submit_defect_map"' in TOOL_SYSTEM_PROMPT
     assert "nothing else" in TOOL_SYSTEM_PROMPT
-    assert "<think>" in TOOL_SYSTEM_PROMPT
+    assert "reasoning markup" in TOOL_SYSTEM_PROMPT
+    assert "<think>" not in TOOL_SYSTEM_PROMPT
 
 
 def test_frontier_prompt_rows_select_seed_subset_for_grpo() -> None:
@@ -148,6 +149,32 @@ def test_reward_func_adds_format_and_exact_copy_shaping() -> None:
         + EXACT_PRIOR_COPY_REWARD
         + STRICT_FINAL_SUBMIT_FORMAT_REWARD
     ]
+
+
+def test_reward_func_does_not_add_strict_submit_bonus_without_prior() -> None:
+    env = AtomicVisionToolEnv()
+    env.reward = 2.0
+    env.done = True
+    env.last_submit_action = AtomicVisionAction(
+        action_type="submit_defect_map",
+        predicted_defects=["Zn"],
+        predicted_concentrations=[0.19],
+        confidence=0.65,
+    )
+
+    rewards = reward_func(
+        [env],
+        completions=[
+            (
+                '<tool_call>{"name":"submit_defect_map","arguments":'
+                '{"predicted_defects":["Zn"],'
+                '"predicted_concentrations":[0.19],'
+                '"confidence":0.65}}</tool_call>'
+            )
+        ],
+    )
+
+    assert rewards == [2.0 + VALID_TOOL_CALL_FORMAT_REWARD]
 
 
 def test_prior_copy_penalty_only_applies_to_high_confidence_priors() -> None:
@@ -575,7 +602,9 @@ def test_observation_formatter_includes_training_signal() -> None:
     assert "scan_cost_so_far=1.500" in text
     assert "recommended_next_action=submit_defect_map_with_prior" in text
     assert "recommended_first_action=ask_prior" in text
-    assert "strict_output_rule=one_xml_tool_call_only_no_think_no_extra_text" in text
+    assert "tool_output_rule=one_xml_tool_call_only_no_reasoning_markup_no_extra_text" in text
+    assert "submit_field_order=predicted_defects,predicted_concentrations,confidence" in text
+    assert "submit_output_rule=if_submitting_use_one_xml_tool_call_then_stop" in text
     assert "strict_submit_template=<tool_call>" in text
     assert '"predicted_defects":["B"]' in text
     assert "spectral_summary=" in text
@@ -611,7 +640,10 @@ def test_observation_formatter_marks_borderline_prior_for_variance() -> None:
 
     assert "recommended_next_action=copy_prior_or_one_cheap_scan_then_submit" in text
     assert "one_cheap_scan_only_when_borderline" in text
-    assert "strict_submit_rule=if_submitting_copy_template_exactly_and_stop" in text
+    assert "submit_field_order=predicted_defects,predicted_concentrations,confidence" in text
+    assert "submit_output_rule=if_submitting_use_one_xml_tool_call_then_stop" in text
+    assert "strict_submit_template=" not in text
+    assert "strict_submit_rule=" not in text
 
 
 def test_observation_formatter_exposes_reference_delta_signal() -> None:

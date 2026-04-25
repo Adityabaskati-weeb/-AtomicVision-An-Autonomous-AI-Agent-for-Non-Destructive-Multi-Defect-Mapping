@@ -34,8 +34,8 @@ POST_TERMINAL_TOOL_PENALTY = 2.0
 VALID_TOOL_CALL_FORMAT_REWARD = 0.15
 RECOVERABLE_TOOL_CALL_FORMAT_PENALTY = 0.10
 INVALID_TOOL_CALL_FORMAT_PENALTY = 0.75
-STRICT_FINAL_SUBMIT_FORMAT_REWARD = 0.25
-RECOVERABLE_FINAL_SUBMIT_FORMAT_PENALTY = 0.15
+STRICT_FINAL_SUBMIT_FORMAT_REWARD = 0.05
+RECOVERABLE_FINAL_SUBMIT_FORMAT_PENALTY = 0.0
 EXACT_PRIOR_COPY_REWARD = 0.05
 CONFIDENT_PRIOR_MIS_COPY_PENALTY = 0.25
 CONFIDENT_PRIOR_COPY_THRESHOLD = 0.65
@@ -76,8 +76,8 @@ TOOL_SYSTEM_PROMPT = (
     '"predicted_concentrations":[0.12],"confidence":0.73}}</tool_call>. '
     "Do not write placeholder text or ellipsis examples inside the tool-call tags. "
     "Do not write ask_prior or submit_defect_map outside the JSON object. "
-    "Do not emit <think> tags, reasoning blocks, assistant labels, or prose before "
-    "or after the tool call. "
+    "Do not emit reasoning markup, assistant labels, or prose before or after the "
+    "tool call. "
     "Use ask_prior first. After the prior appears, copy high-confidence priors into "
     "submit_defect_map. For borderline priors, one cheap valid scan or "
     "compare_reference call is allowed if it can improve the final map. "
@@ -101,8 +101,8 @@ DEFAULT_PROMPT = (
     "predicted_concentrations, and confidence. If confidence is 0.50-0.65, either "
     "submit the prior or request one cheap extra signal only if it can improve the "
     "final map. "
-    "When you submit, output only the final <tool_call> block with no <think> tags "
-    "and no extra text. "
+    "When you submit, output one XML-wrapped tool call and stop; do not add "
+    "assistant labels, reasoning markup, or extra text. "
     "Extra evidence is expensive: ask_prior costs 1.5, compare_reference costs "
     "0.5, quick_pdos costs 1.0, standard_pdos costs 2.0, raman_proxy costs 2.5, "
     "and high_res_pdos or zoom_band costs 4.0. Request another scan only when the "
@@ -1092,11 +1092,14 @@ def render_tool_call_text(call: dict[str, Any]) -> str:
 def _strict_submit_template(prior: dict[str, Any]) -> str | None:
     defects = prior.get("predicted_defects") or []
     concentrations = prior.get("predicted_concentrations") or []
+    confidence = float(prior.get("confidence") or 0.0)
     if isinstance(concentrations, dict):
         concentrations = [concentrations.get(defect, 0.0) for defect in defects]
     if not isinstance(defects, list) or not isinstance(concentrations, list):
         return None
     if not defects or len(defects) != len(concentrations):
+        return None
+    if confidence < CONFIDENT_PRIOR_COPY_THRESHOLD:
         return None
     call = {
         "name": "submit_defect_map",
@@ -1105,7 +1108,7 @@ def _strict_submit_template(prior: dict[str, Any]) -> str | None:
             "predicted_concentrations": _rounded_floats(
                 [float(item) for item in concentrations]
             ),
-            "confidence": round(float(prior.get("confidence") or 0.65), 5),
+            "confidence": round(confidence, 5),
         },
     }
     return render_tool_call_text(call)
@@ -1205,6 +1208,10 @@ def _tool_call_format_reward(text: str) -> float:
 
 
 def _strict_terminal_submit_reward(text: str, env: Any) -> float:
+    if getattr(env, "last_submit_action", None) is None:
+        return 0.0
+    if getattr(env, "last_prior_prediction", None) is None:
+        return 0.0
     repaired_call = repair_tool_call(text)
     if repaired_call is None or repaired_call.get("name") != "submit_defect_map":
         return 0.0
@@ -1433,9 +1440,16 @@ def _format_observation(observation: dict) -> str:
         if done
         else ""
     )
+    has_prior = bool(prior.get("predicted_defects"))
+    submit_shape_instruction = (
+        "\nsubmit_field_order=predicted_defects,predicted_concentrations,confidence"
+        "\nsubmit_output_rule=if_submitting_use_one_xml_tool_call_then_stop"
+        if has_prior
+        else ""
+    )
     strict_submit_instruction = (
         f"\nstrict_submit_template={strict_submit_template}"
-        "\nstrict_submit_rule=if_submitting_copy_template_exactly_and_stop"
+        "\nstrict_submit_rule=copy_template_only_when_prior_is_high_confidence"
         if strict_submit_template is not None
         else ""
     )
@@ -1451,7 +1465,7 @@ def _format_observation(observation: dict) -> str:
         f"standard_pdos:2.0, raman_proxy:2.5, high_res_pdos_or_zoom:4.0\n"
         f"scan_cost_so_far={scan_cost_so_far:.3f}\n"
         f"cost_discipline=submit_high_confidence_prior; one_cheap_scan_only_when_borderline\n"
-        "strict_output_rule=one_xml_tool_call_only_no_think_no_extra_text\n"
+        "tool_output_rule=one_xml_tool_call_only_no_reasoning_markup_no_extra_text\n"
         f"recommended_first_action=ask_prior\n"
         f"recommended_next_action={recommended_next_action}\n"
         f"candidate_defects={observation.get('candidate_defects')}\n"
@@ -1459,6 +1473,7 @@ def _format_observation(observation: dict) -> str:
         f"prior={prior}\n"
         f"reward={observation.get('reward')} done={observation.get('done')}\n"
         f"reward_breakdown={reward_breakdown}"
+        f"{submit_shape_instruction}"
         f"{strict_submit_instruction}"
         f"{terminal_instruction}"
     )
