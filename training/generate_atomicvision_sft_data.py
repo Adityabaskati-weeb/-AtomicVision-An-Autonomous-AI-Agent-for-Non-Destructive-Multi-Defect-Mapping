@@ -50,6 +50,7 @@ FORMAT_REFRESH_SUBMIT_PRIOR_RATIO = 0.90
 FORMAT_REFRESH_REFERENCE_RATIO = 0.0
 STRICT_XML_SUBMIT_REFRESH_MIN_SCAN_IMPROVEMENT = 0.10
 STRICT_XML_SUBMIT_REFRESH_MAX_SCAN_CANDIDATES = 2048
+STRICT_SUBMIT_CONTRACT_REFERENCE_FRACTION = 0.25
 HARD_FRONTIER_SUBMIT_PRIOR_RATIO = 0.85
 HARD_FRONTIER_REFERENCE_RATIO = 0.10
 HARD_FRONTIER_MIN_SCAN_IMPROVEMENT = 0.15
@@ -63,6 +64,7 @@ def build_sft_examples(
     sample_types: tuple[str, ...] = ("ask_prior", "submit_prior"),
     min_scan_improvement: float = 0.25,
     max_scan_candidates_per_difficulty: int | None = None,
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build SFT examples from deterministic local AtomicVision episodes."""
 
@@ -82,6 +84,7 @@ def build_sft_examples(
                         seed=seed,
                         difficulty=difficulty,
                         sample_types=base_sample_types,
+                        structured_tool_calls=structured_tool_calls,
                     )
                 )
         if SCAN_SAMPLE_TYPE in sample_types:
@@ -92,6 +95,7 @@ def build_sft_examples(
                     seed_start=seed_start,
                     min_scan_improvement=min_scan_improvement,
                     max_candidate_seeds=max_scan_candidates_per_difficulty,
+                    structured_tool_calls=structured_tool_calls,
                 )
             )
     return examples
@@ -105,6 +109,7 @@ def build_cost_aware_sft_examples(
     reference_ratio: float = COST_AWARE_REFERENCE_RATIO,
     min_scan_improvement: float = 0.25,
     max_scan_candidates_per_difficulty: int | None = None,
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build a cheap-prior-biased SFT set for cost-aware tool use.
 
@@ -137,6 +142,7 @@ def build_cost_aware_sft_examples(
                     seed=seed,
                     difficulty=difficulty,
                     sample_types=("submit_prior",),
+                    structured_tool_calls=structured_tool_calls,
                 )
             )
         for seed in range(seed_start + submit_count, seed_start + submit_count + ask_count):
@@ -145,6 +151,7 @@ def build_cost_aware_sft_examples(
                     seed=seed,
                     difficulty=difficulty,
                     sample_types=("ask_prior",),
+                    structured_tool_calls=structured_tool_calls,
                 )
             )
         if reference_count:
@@ -155,6 +162,7 @@ def build_cost_aware_sft_examples(
                     seed_start=seed_start,
                     min_scan_improvement=min_scan_improvement,
                     max_candidate_seeds=max_scan_candidates_per_difficulty,
+                    structured_tool_calls=structured_tool_calls,
                 )
             )
     return examples
@@ -166,6 +174,7 @@ def build_two_step_curriculum_examples(
     seed_start: int = 0,
     min_scan_improvement: float = 0.25,
     max_scan_candidates_per_difficulty: int | None = None,
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build the official two-stage schema curriculum used for held-out repair."""
 
@@ -177,6 +186,7 @@ def build_two_step_curriculum_examples(
         reference_ratio=FORMAT_REPAIR_REFERENCE_RATIO,
         min_scan_improvement=min_scan_improvement,
         max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+        structured_tool_calls=structured_tool_calls,
     )
     bridge = build_cost_aware_sft_examples(
         examples_per_difficulty=examples_per_difficulty,
@@ -186,6 +196,7 @@ def build_two_step_curriculum_examples(
         reference_ratio=SUBMIT_BRIDGE_REFERENCE_RATIO,
         min_scan_improvement=min_scan_improvement,
         max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+        structured_tool_calls=structured_tool_calls,
     )
     return [*repair, *bridge]
 
@@ -198,6 +209,7 @@ def build_hard_frontier_boost_examples(
     reference_ratio: float = HARD_FRONTIER_REFERENCE_RATIO,
     min_scan_improvement: float = HARD_FRONTIER_MIN_SCAN_IMPROVEMENT,
     max_scan_candidates_per_difficulty: int | None = HARD_FRONTIER_MAX_SCAN_CANDIDATES,
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build a hard-focused continuation set with wider reference search."""
 
@@ -209,6 +221,7 @@ def build_hard_frontier_boost_examples(
         reference_ratio=reference_ratio,
         min_scan_improvement=min_scan_improvement,
         max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+        structured_tool_calls=structured_tool_calls,
     )
 
 
@@ -220,6 +233,7 @@ def build_format_refresh_examples(
     reference_ratio: float = FORMAT_REFRESH_REFERENCE_RATIO,
     min_scan_improvement: float = 0.25,
     max_scan_candidates_per_difficulty: int | None = None,
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build a tiny strict-envelope refresh set before hard-only GRPO.
 
@@ -236,7 +250,174 @@ def build_format_refresh_examples(
         reference_ratio=reference_ratio,
         min_scan_improvement=min_scan_improvement,
         max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+        structured_tool_calls=structured_tool_calls,
     )
+
+
+def build_strict_submit_contract_refresh_examples(
+    examples_per_difficulty: int,
+    difficulties: tuple[str, ...] = ("hard",),
+    seed_start: int = 0,
+    reference_fraction: float = STRICT_SUBMIT_CONTRACT_REFERENCE_FRACTION,
+    submit_prior_ratio: float = FORMAT_REFRESH_SUBMIT_PRIOR_RATIO,
+    min_scan_improvement: float = STRICT_XML_SUBMIT_REFRESH_MIN_SCAN_IMPROVEMENT,
+    max_scan_candidates_per_difficulty: int | None = STRICT_XML_SUBMIT_REFRESH_MAX_SCAN_CANDIDATES,
+    structured_tool_calls: bool = False,
+) -> list[dict[str, Any]]:
+    """Build a strict-submit repair set that mixes both known helpful regimes.
+
+    We keep the V12-style submit-heavy strict-envelope warmup, then add a smaller
+    batch of final reference->submit turns from the exact hard prompt pool where
+    GRPO has been drifting into tagless repaired output.
+    """
+
+    if examples_per_difficulty <= 0:
+        raise ValueError("examples_per_difficulty must be positive")
+    if not 0.0 <= reference_fraction <= 1.0:
+        raise ValueError("reference_fraction must be between 0 and 1")
+
+    reference_examples = int(round(examples_per_difficulty * reference_fraction))
+    if examples_per_difficulty >= 4:
+        reference_examples = max(1, reference_examples)
+    reference_examples = min(reference_examples, examples_per_difficulty)
+    format_examples = examples_per_difficulty - reference_examples
+
+    examples: list[dict[str, Any]] = []
+    if format_examples > 0:
+        examples.extend(
+            build_format_refresh_examples(
+                examples_per_difficulty=format_examples,
+                difficulties=difficulties,
+                seed_start=seed_start,
+                submit_prior_ratio=submit_prior_ratio,
+                reference_ratio=FORMAT_REFRESH_REFERENCE_RATIO,
+                min_scan_improvement=min_scan_improvement,
+                max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+                structured_tool_calls=structured_tool_calls,
+            )
+        )
+    if reference_examples > 0:
+        examples.extend(
+            build_strict_xml_submit_refresh_examples(
+                examples_per_difficulty=reference_examples,
+                difficulties=difficulties,
+                seed_start=seed_start,
+                min_scan_improvement=min_scan_improvement,
+                max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+                structured_tool_calls=structured_tool_calls,
+            )
+        )
+    return examples
+
+
+def _planned_reference_examples_per_difficulty(
+    examples_per_difficulty: int,
+    submit_prior_ratio: float,
+    reference_ratio: float,
+) -> int:
+    """Mirror the build_cost_aware_sft_examples reference-count math."""
+
+    submit_count = int(round(examples_per_difficulty * submit_prior_ratio))
+    reference_count = int(round(examples_per_difficulty * reference_ratio))
+    if submit_count + reference_count > examples_per_difficulty:
+        reference_count = max(0, examples_per_difficulty - submit_count)
+    return reference_count
+
+
+def _planned_strict_submit_contract_reference_examples_per_difficulty(
+    examples_per_difficulty: int,
+    reference_fraction: float,
+) -> int:
+    """Mirror the mixed strict-submit contract refresh reference-count math."""
+
+    reference_examples = int(round(examples_per_difficulty * reference_fraction))
+    if examples_per_difficulty >= 4:
+        reference_examples = max(1, reference_examples)
+    return min(reference_examples, examples_per_difficulty)
+
+
+def _expected_scan_examples(args: argparse.Namespace) -> int:
+    """Return the intended number of submit_after_reference rows for the current CLI plan."""
+
+    difficulties = len(args.difficulties)
+    if args.profile == "explicit":
+        if SCAN_SAMPLE_TYPE not in args.sample_types:
+            return 0
+        return args.episodes_per_difficulty * difficulties
+    if args.profile == "cost_aware":
+        return _planned_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            args.submit_prior_ratio,
+            args.reference_ratio,
+        ) * difficulties
+    if args.profile == "format_repair":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = FORMAT_REPAIR_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = FORMAT_REPAIR_REFERENCE_RATIO
+        return _planned_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            submit_prior_ratio,
+            reference_ratio,
+        ) * difficulties
+    if args.profile == "submit_bridge":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = SUBMIT_BRIDGE_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = SUBMIT_BRIDGE_REFERENCE_RATIO
+        return _planned_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            submit_prior_ratio,
+            reference_ratio,
+        ) * difficulties
+    if args.profile == "hard_frontier_boost":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = HARD_FRONTIER_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = HARD_FRONTIER_REFERENCE_RATIO
+        return _planned_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            submit_prior_ratio,
+            reference_ratio,
+        ) * difficulties
+    if args.profile == "format_refresh":
+        submit_prior_ratio = args.submit_prior_ratio
+        reference_ratio = args.reference_ratio
+        if submit_prior_ratio == COST_AWARE_SUBMIT_PRIOR_RATIO:
+            submit_prior_ratio = FORMAT_REFRESH_SUBMIT_PRIOR_RATIO
+        if reference_ratio == COST_AWARE_REFERENCE_RATIO:
+            reference_ratio = FORMAT_REFRESH_REFERENCE_RATIO
+        return _planned_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            submit_prior_ratio,
+            reference_ratio,
+        ) * difficulties
+    if args.profile == "strict_submit_contract_refresh":
+        return _planned_strict_submit_contract_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            args.reference_fraction,
+        ) * difficulties
+    if args.profile == "strict_xml_submit_refresh":
+        return args.episodes_per_difficulty * difficulties
+    if args.profile == "two_step_curriculum":
+        repair_reference = _planned_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            FORMAT_REPAIR_SUBMIT_PRIOR_RATIO,
+            FORMAT_REPAIR_REFERENCE_RATIO,
+        )
+        bridge_reference = _planned_reference_examples_per_difficulty(
+            args.episodes_per_difficulty,
+            SUBMIT_BRIDGE_SUBMIT_PRIOR_RATIO,
+            SUBMIT_BRIDGE_REFERENCE_RATIO,
+        )
+        return (repair_reference + bridge_reference) * difficulties
+    return 0
 
 
 def build_strict_xml_submit_refresh_examples(
@@ -291,6 +472,7 @@ def build_episode_examples(
     seed: int,
     difficulty: str = "medium",
     sample_types: tuple[str, ...] = ("ask_prior", "submit_prior"),
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build ask-prior and submit-prior examples for one episode."""
 
@@ -329,7 +511,10 @@ def build_episode_examples(
                 "messages": [
                     {"role": "system", "content": TOOL_SYSTEM},
                     {"role": "user", "content": initial_user},
-                    {"role": "assistant", "content": ask_text},
+                    _assistant_tool_message(
+                        ASK_PRIOR_CALL,
+                        structured_tool_calls=structured_tool_calls,
+                    ),
                 ],
             }
         )
@@ -349,9 +534,15 @@ def build_episode_examples(
                 "messages": [
                     {"role": "system", "content": TOOL_SYSTEM},
                     {"role": "user", "content": initial_user},
-                    {"role": "assistant", "content": ask_text},
+                    _assistant_tool_message(
+                        ASK_PRIOR_CALL,
+                        structured_tool_calls=structured_tool_calls,
+                    ),
                     {"role": "user", "content": _tool_response(prior_text)},
-                    {"role": "assistant", "content": submit_text},
+                    _assistant_tool_message(
+                        submit_call,
+                        structured_tool_calls=structured_tool_calls,
+                    ),
                 ],
             }
         )
@@ -364,6 +555,7 @@ def build_scan_improvement_examples(
     seed_start: int = 0,
     min_scan_improvement: float = 0.25,
     max_candidate_seeds: int | None = None,
+    structured_tool_calls: bool = False,
 ) -> list[dict[str, Any]]:
     """Build examples where compare_reference plus a revised map beats prior-copy."""
 
@@ -378,6 +570,7 @@ def build_scan_improvement_examples(
             seed=seed,
             difficulty=difficulty,
             min_scan_improvement=min_scan_improvement,
+            structured_tool_calls=structured_tool_calls,
         )
         if example is None:
             continue
@@ -549,6 +742,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "cost_aware",
             "format_repair",
             "format_refresh",
+            "strict_submit_contract_refresh",
             "strict_xml_submit_refresh",
             "submit_bridge",
             "two_step_curriculum",
@@ -561,6 +755,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "format_repair creates a held-out repair mix with many more "
             "first-step ask_prior rows. format_refresh creates a tiny "
             "submit-heavy strict-envelope refresh set before GRPO. "
+            "strict_submit_contract_refresh combines that submit-heavy "
+            "refresh with a smaller batch of hard/reference-improvement "
+            "final submit turns from the GRPO failure pool. "
             "strict_xml_submit_refresh creates a submit-only hard/reference-"
             "improvement refresh set that mirrors the GRPO failure pool. "
             "submit_bridge strengthens the "
@@ -614,6 +811,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "literal stores assistant tool turns as exact <tool_call> text. "
             "structured stores assistant tool turns as HF-style tool_calls so "
             "the chat template renders the tool envelope during training."
+        ),
+    )
+    parser.add_argument(
+        "--reference-fraction",
+        type=float,
+        default=STRICT_SUBMIT_CONTRACT_REFERENCE_FRACTION,
+        help=(
+            "Strict-submit-contract refresh only: fraction of examples drawn "
+            "from the hard reference-improvement failure pool."
         ),
     )
     return parser
@@ -679,6 +885,24 @@ def main() -> None:
             reference_ratio=reference_ratio,
             min_scan_improvement=args.min_scan_improvement,
             max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+            structured_tool_calls=args.assistant_tool_format == "structured",
+        )
+    elif args.profile == "strict_submit_contract_refresh":
+        min_scan_improvement = args.min_scan_improvement
+        max_scan_candidates_per_difficulty = args.max_scan_candidates_per_difficulty
+        if min_scan_improvement == 0.25:
+            min_scan_improvement = STRICT_XML_SUBMIT_REFRESH_MIN_SCAN_IMPROVEMENT
+        if max_scan_candidates_per_difficulty is None:
+            max_scan_candidates_per_difficulty = STRICT_XML_SUBMIT_REFRESH_MAX_SCAN_CANDIDATES
+        examples = build_strict_submit_contract_refresh_examples(
+            examples_per_difficulty=args.episodes_per_difficulty,
+            difficulties=tuple(args.difficulties),
+            seed_start=args.seed_start,
+            reference_fraction=args.reference_fraction,
+            submit_prior_ratio=FORMAT_REFRESH_SUBMIT_PRIOR_RATIO,
+            min_scan_improvement=min_scan_improvement,
+            max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+            structured_tool_calls=args.assistant_tool_format == "structured",
         )
     elif args.profile == "strict_xml_submit_refresh":
         min_scan_improvement = args.min_scan_improvement
@@ -702,6 +926,7 @@ def main() -> None:
             seed_start=args.seed_start,
             min_scan_improvement=args.min_scan_improvement,
             max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+            structured_tool_calls=args.assistant_tool_format == "structured",
         )
     elif args.profile == "hard_frontier_boost":
         submit_prior_ratio = args.submit_prior_ratio
@@ -724,6 +949,7 @@ def main() -> None:
             reference_ratio=reference_ratio,
             min_scan_improvement=min_scan_improvement,
             max_scan_candidates_per_difficulty=max_scan_candidates_per_difficulty,
+            structured_tool_calls=args.assistant_tool_format == "structured",
         )
     else:
         examples = build_sft_examples(
@@ -733,13 +959,15 @@ def main() -> None:
             sample_types=tuple(args.sample_types),
             min_scan_improvement=args.min_scan_improvement,
             max_scan_candidates_per_difficulty=args.max_scan_candidates_per_difficulty,
+            structured_tool_calls=args.assistant_tool_format == "structured",
         )
     output_path = write_jsonl(examples, args.output_jsonl)
     counts = Counter(example["sample_type"] for example in examples)
     print(f"Wrote {len(examples)} examples to {output_path}")
     print(f"Difficulties: {', '.join(args.difficulties)}")
     print(f"Sample counts: {dict(sorted(counts.items()))}")
-    if SCAN_SAMPLE_TYPE in counts and counts[SCAN_SAMPLE_TYPE] < args.episodes_per_difficulty:
+    expected_scan_examples = _expected_scan_examples(args)
+    if SCAN_SAMPLE_TYPE in counts and counts[SCAN_SAMPLE_TYPE] < expected_scan_examples:
         print(
             "Warning: fewer scan-improvement examples were found than requested; "
             "increase --max-scan-candidates-per-difficulty or lower "
