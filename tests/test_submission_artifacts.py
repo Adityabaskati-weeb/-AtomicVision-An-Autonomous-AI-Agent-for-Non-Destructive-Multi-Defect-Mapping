@@ -14,6 +14,8 @@ def test_readme_links_validator_artifacts() -> None:
     assert "training/train_sft_atomicvision_safe.py" in readme
     assert "docs/hf-jobs-training-playbook.md" in readme
     assert "docs/experiment-lineage.md" in readme
+    assert "docs/hard-only-grpo-reference-probe-results.md" in readme
+    assert "docs/hard-only-grpo-reference-probe-metrics.json" in readme
 
 
 def test_validator_files_exist() -> None:
@@ -23,3 +25,5 @@ def test_validator_files_exist() -> None:
     assert Path("docs/training-reward-curve.png").exists()
     assert Path("docs/hf-jobs-training-playbook.md").exists()
     assert Path("docs/experiment-lineage.md").exists()
+    assert Path("docs/hard-only-grpo-reference-probe-results.md").exists()
+    assert Path("docs/hard-only-grpo-reference-probe-metrics.json").exists()

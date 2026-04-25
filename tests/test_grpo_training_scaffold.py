@@ -14,6 +14,8 @@ from training.train_grpo_atomicvision import (
     EXACT_PRIOR_COPY_REWARD,
     parse_strict_tool_call,
     parse_last_strict_tool_call,
+    parse_terminal_strict_tool_call,
+    RECOVERABLE_TOOL_CALL_FORMAT_PENALTY,
     repair_tool_call,
     TRAINING_PRESETS,
     VALID_TOOL_CALL_FORMAT_REWARD,
@@ -197,6 +199,28 @@ def test_repair_tool_call_recovers_submit_from_defect_map_payload() -> None:
     }
 
 
+def test_repair_tool_call_prefers_terminal_submit_over_initial_ask_prior() -> None:
+    transcript = "\n".join(
+        [
+            '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call>',
+            "user",
+            "<tool_response>reward=None done=False</tool_response>",
+            "assistant",
+            "submit_defect_map",
+            '{"defect_map":{"Zn":0.19,"P":0.05},"confidence":0.65}',
+        ]
+    )
+
+    assert repair_tool_call(transcript) == {
+        "name": "submit_defect_map",
+        "arguments": {
+            "predicted_defects": ["Zn", "P"],
+            "predicted_concentrations": [0.19, 0.05],
+            "confidence": 0.65,
+        },
+    }
+
+
 def test_episode_transcript_uses_last_strict_tool_call() -> None:
     transcript = "\n".join(
         [
@@ -246,6 +270,27 @@ def test_tool_call_format_reward_accepts_multi_turn_strict_transcript() -> None:
     )
 
     assert _tool_call_format_reward(transcript) == VALID_TOOL_CALL_FORMAT_REWARD
+
+
+def test_tool_call_format_reward_uses_smaller_penalty_for_recoverable_terminal_submit() -> None:
+    transcript = "\n".join(
+        [
+            '<tool_call>{"name":"ask_prior","arguments":{}}</tool_call>',
+            "user",
+            "<tool_response>reward=None done=False</tool_response>",
+            "assistant",
+            "submit_defect_map",
+            '{"defect_map":{"Zn":0.19},"confidence":0.65}',
+        ]
+    )
+
+    assert parse_last_strict_tool_call(transcript) == {
+        "name": "ask_prior",
+        "arguments": {},
+    }
+    assert parse_terminal_strict_tool_call(transcript) is None
+    assert repair_tool_call(transcript) is not None
+    assert _tool_call_format_reward(transcript) == -RECOVERABLE_TOOL_CALL_FORMAT_PENALTY
 
 
 def test_training_presets_keep_grpo_generation_batch_valid() -> None:

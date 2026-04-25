@@ -54,6 +54,48 @@ accuracy against scan cost.
 
 ![Training reward curve](docs/training-reward-curve.png)
 
+## Submission Story
+
+### Problem
+
+AtomicVision targets a capability gap that generic chat models still handle
+poorly: cost-aware scientific decision making under partial observability. The
+agent must turn compact spectral evidence into a final defect map without
+destructive measurements or unlimited scans.
+
+### Environment
+
+The environment is a real OpenEnv lab loop, not a static dataset prompt. The
+agent:
+
+- starts from a low-cost spectral observation,
+- chooses scientific tools such as `ask_prior`, `compare_reference`, or scans,
+- pays explicit budget costs for each action,
+- and is scored on defect identity, concentration quality, confidence, and
+  wasteful behavior penalties.
+
+### Results
+
+The current best published adapter is
+[prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora).
+It improved the medium held-out slice while preserving perfect strict tool-call
+execution. The remaining gap is hard-case quality, not environment stability.
+
+### Why It Matters
+
+This project turns LLM training into a scientifically grounded professional-task
+environment: the model has to choose, spend, justify, and finish correctly
+rather than just produce plausible text. That makes it useful both as a
+hackathon submission and as a research sandbox for tool-using agents.
+
+## Interesting Artifacts
+
+- Latest GRPO probe writeup: [docs/hard-only-grpo-reference-probe-results.md](docs/hard-only-grpo-reference-probe-results.md)
+- Latest GRPO probe metrics JSON: [docs/hard-only-grpo-reference-probe-metrics.json](docs/hard-only-grpo-reference-probe-metrics.json)
+- Latest HF Jobs probe run:
+  [job 69ec694ad2c8bd8662bcd2d2](https://huggingface.co/jobs/prodigyhuh/69ec694ad2c8bd8662bcd2d2)
+- Mini-blog draft: [docs/hackathon-mini-blog-draft.md](docs/hackathon-mini-blog-draft.md)
+
 The project is moving phase by phase. Each stage is implemented only after the
 previous gate has been validated.
 
@@ -207,3 +249,13 @@ was not promoted. More importantly, later held-out recovery runs showed that
 tool-call formatting can still collapse even when training loss looks healthy.
 That is why verifier columns are now treated as first-class gates rather than
 optional diagnostics.
+
+The latest short HF Jobs GRPO probe now has a committed writeup and metrics
+artifact:
+
+- [docs/hard-only-grpo-reference-probe-results.md](docs/hard-only-grpo-reference-probe-results.md)
+- [docs/hard-only-grpo-reference-probe-metrics.json](docs/hard-only-grpo-reference-probe-metrics.json)
+
+That probe produced real reward variance, but it still failed the continuation
+gate because `submit_tool_rate` and `strict_tool_call_pass_rate` stayed at
+`0.0`.

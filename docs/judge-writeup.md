@@ -94,3 +94,9 @@ artifacts:
 
 Those plots are also embedded in the main README so the automated pass can
 reach them directly from the project root.
+
+The repository also includes the latest Hugging Face Jobs GRPO probe summary as
+committed evidence rather than leaving it only in cloud logs:
+
+- [hard-only-grpo-reference-probe-results.md](hard-only-grpo-reference-probe-results.md)
+- [hard-only-grpo-reference-probe-metrics.json](hard-only-grpo-reference-probe-metrics.json)

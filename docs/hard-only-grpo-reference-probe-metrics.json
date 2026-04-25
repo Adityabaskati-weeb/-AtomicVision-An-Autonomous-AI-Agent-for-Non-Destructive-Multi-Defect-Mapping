@@ -1,0 +1,21 @@
+{
+  "job_id": "69ec694ad2c8bd8662bcd2d2",
+  "job_url": "https://huggingface.co/jobs/prodigyhuh/69ec694ad2c8bd8662bcd2d2",
+  "hardware": "a10g-large",
+  "base_adapter": "prodigyhuh/atomicvision-medium-fidelity-boost-lora",
+  "prompt_focus": "reference-improvement",
+  "difficulty": "hard",
+  "seed_band": "4000-7999",
+  "final_metrics": {
+    "reward_std": 0.5064948797225952,
+    "frac_reward_zero_std": 0.75,
+    "done_rate": 0.75,
+    "normalized_tool_call_pass_rate": 1.0,
+    "submit_tool_rate": 0.0,
+    "strict_tool_call_pass_rate": 0.0,
+    "tools_failure_frequency": 0.0,
+    "train_loss": 6.757584003480588e-08,
+    "train_runtime_s": 104.2181
+  },
+  "verdict": "informative_but_not_ready_for_longer_grpo"
+}

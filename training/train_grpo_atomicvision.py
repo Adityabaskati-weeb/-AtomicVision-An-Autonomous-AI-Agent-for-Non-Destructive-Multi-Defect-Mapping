@@ -32,6 +32,7 @@ DEFAULT_ENV_URL = "https://prodigyhuh-atomicvision-openenv.hf.space"
 DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
 POST_TERMINAL_TOOL_PENALTY = 2.0
 VALID_TOOL_CALL_FORMAT_REWARD = 0.15
+RECOVERABLE_TOOL_CALL_FORMAT_PENALTY = 0.10
 INVALID_TOOL_CALL_FORMAT_PENALTY = 0.75
 EXACT_PRIOR_COPY_REWARD = 0.05
 CONFIDENT_PRIOR_MIS_COPY_PENALTY = 0.25
@@ -1076,20 +1077,38 @@ def render_tool_call_text(call: dict[str, Any]) -> str:
     return f"<tool_call>{payload}</tool_call>"
 
 
-def _parse_all_strict_tool_calls(text: str) -> list[dict[str, Any]]:
+def _parse_all_strict_tool_calls_with_spans(text: str) -> list[tuple[dict[str, Any], int, int]]:
     """Parse every strictly valid XML-wrapped JSON tool call in a transcript."""
 
-    matches = re.findall(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", text, re.S)
-    calls: list[dict[str, Any]] = []
-    for match in matches:
+    calls: list[tuple[dict[str, Any], int, int]] = []
+    for match in re.finditer(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", text, re.S):
         try:
-            call = json.loads(match)
+            call = json.loads(match.group(1))
         except json.JSONDecodeError:
             return []
         if not _is_valid_tool_call(call):
             return []
-        calls.append(call)
+        calls.append((call, match.start(), match.end()))
     return calls
+
+
+def _parse_all_strict_tool_calls(text: str) -> list[dict[str, Any]]:
+    return [call for call, _, _ in _parse_all_strict_tool_calls_with_spans(text)]
+
+
+def parse_terminal_strict_tool_call(text: str) -> dict[str, Any] | None:
+    """Return the last strict tool call only when it is the terminal tool mention."""
+
+    calls = _parse_all_strict_tool_calls_with_spans(text)
+    if not calls:
+        return None
+    _, last_tool_pos = _last_tool_name(text)
+    if last_tool_pos < 0:
+        return calls[-1][0]
+    call, start, end = calls[-1]
+    if start <= last_tool_pos < end:
+        return call
+    return None
 
 
 def parse_strict_tool_call(text: str) -> dict[str, Any] | None:
@@ -1113,26 +1132,22 @@ def parse_last_strict_tool_call(text: str) -> dict[str, Any] | None:
 def repair_tool_call(text: str) -> dict[str, Any] | None:
     """Recover a valid tool call from near-miss generations when possible."""
 
-    strict = parse_strict_tool_call(text)
-    if strict is not None:
-        return strict
-
-    terminal_strict = parse_last_strict_tool_call(text)
+    terminal_strict = parse_terminal_strict_tool_call(text)
     if terminal_strict is not None:
         return terminal_strict
 
-    tool_name = _first_tool_name(text)
+    tool_name, tool_pos = _last_tool_name(text)
     if tool_name is None:
         return None
 
     if tool_name in {"ask_prior", "compare_reference"}:
         return {"name": tool_name, "arguments": {}}
     if tool_name == "request_scan":
-        return _repair_request_scan_call(text)
+        return _repair_request_scan_call(text, start_pos=tool_pos)
     if tool_name == "zoom_band":
-        return _repair_zoom_band_call(text)
+        return _repair_zoom_band_call(text, start_pos=tool_pos)
     if tool_name == "submit_defect_map":
-        return _repair_submit_defect_map_call(text)
+        return _repair_submit_defect_map_call(text, start_pos=tool_pos)
     return None
 
 
@@ -1148,9 +1163,11 @@ def canonicalize_tool_call_text(text: str) -> str:
 def _tool_call_format_reward(text: str) -> float:
     if not text:
         return 0.0
-    if parse_last_strict_tool_call(text) is None:
-        return -INVALID_TOOL_CALL_FORMAT_PENALTY
-    return VALID_TOOL_CALL_FORMAT_REWARD
+    if parse_terminal_strict_tool_call(text) is not None:
+        return VALID_TOOL_CALL_FORMAT_REWARD
+    if repair_tool_call(text) is not None:
+        return -RECOVERABLE_TOOL_CALL_FORMAT_PENALTY
+    return -INVALID_TOOL_CALL_FORMAT_PENALTY
 
 
 def _is_valid_tool_call(call: Any) -> bool:
@@ -1161,15 +1178,15 @@ def _is_valid_tool_call(call: Any) -> bool:
     return isinstance(name, str) and name in VALID_TOOL_NAMES and isinstance(arguments, dict)
 
 
-def _first_tool_name(text: str) -> str | None:
-    first_match = None
+def _last_tool_name(text: str) -> tuple[str | None, int]:
+    last_match = None
     for tool_name in VALID_TOOL_NAMES:
-        match = re.search(rf"\b{re.escape(tool_name)}\b", text)
-        if match is None:
-            continue
-        if first_match is None or match.start() < first_match[1]:
-            first_match = (tool_name, match.start())
-    return None if first_match is None else first_match[0]
+        for match in re.finditer(rf"\b{re.escape(tool_name)}\b", text):
+            if last_match is None or match.start() > last_match[1]:
+                last_match = (tool_name, match.start())
+    if last_match is None:
+        return None, -1
+    return last_match[0], last_match[1]
 
 
 def _first_json_object(text: str, start_pos: int = 0) -> dict[str, Any] | None:
@@ -1186,8 +1203,23 @@ def _first_json_object(text: str, start_pos: int = 0) -> dict[str, Any] | None:
     return None
 
 
-def _repair_request_scan_call(text: str) -> dict[str, Any]:
-    args = _repair_arguments_object(text)
+def _last_json_object(text: str, start_pos: int = 0) -> dict[str, Any] | None:
+    decoder = json.JSONDecoder()
+    last_obj: dict[str, Any] | None = None
+    for index in range(max(0, start_pos), len(text)):
+        if text[index] != "{":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            last_obj = obj
+    return last_obj
+
+
+def _repair_request_scan_call(text: str, start_pos: int = 0) -> dict[str, Any]:
+    args = _repair_arguments_object(text, start_pos=start_pos)
     return {
         "name": "request_scan",
         "arguments": {
@@ -1197,8 +1229,8 @@ def _repair_request_scan_call(text: str) -> dict[str, Any]:
     }
 
 
-def _repair_zoom_band_call(text: str) -> dict[str, Any] | None:
-    args = _repair_arguments_object(text)
+def _repair_zoom_band_call(text: str, start_pos: int = 0) -> dict[str, Any] | None:
+    args = _repair_arguments_object(text, start_pos=start_pos)
     freq_min = args.get("freq_min")
     freq_max = args.get("freq_max")
     if freq_min is None or freq_max is None:
@@ -1214,8 +1246,8 @@ def _repair_zoom_band_call(text: str) -> dict[str, Any] | None:
     }
 
 
-def _repair_submit_defect_map_call(text: str) -> dict[str, Any] | None:
-    args = _repair_arguments_object(text)
+def _repair_submit_defect_map_call(text: str, start_pos: int = 0) -> dict[str, Any] | None:
+    args = _repair_arguments_object(text, start_pos=start_pos)
     if args:
         defects = args.get("predicted_defects") or []
         concentrations = args.get("predicted_concentrations") or []
@@ -1248,8 +1280,14 @@ def _repair_submit_defect_map_call(text: str) -> dict[str, Any] | None:
     }
 
 
-def _repair_arguments_object(text: str) -> dict[str, Any]:
-    obj = _first_json_object(text)
+def _repair_arguments_object(text: str, start_pos: int = 0) -> dict[str, Any]:
+    obj = _first_json_object(text, start_pos=start_pos)
+    if obj is None:
+        obj = _last_json_object(text, start_pos=start_pos)
+    if obj is None and start_pos > 0:
+        obj = _first_json_object(text)
+    if obj is None:
+        obj = _last_json_object(text)
     if obj is None:
         return {}
     if _is_valid_tool_call(obj):

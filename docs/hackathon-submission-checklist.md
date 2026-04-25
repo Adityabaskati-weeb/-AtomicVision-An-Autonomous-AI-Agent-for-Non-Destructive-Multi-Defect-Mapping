@@ -16,8 +16,8 @@ checklist.
 | Use OpenEnv latest release | Implemented | `openenv.yaml` plus `openenv-core==0.2.3` |
 | OpenEnv environment hosted on HF Spaces | Implemented | `prodigyhuh/atomicvision-openenv` |
 | Minimal training script using HF TRL or Unsloth | Implemented | `training/train_grpo_atomicvision.py` plus notebook |
-| Evidence of real training | Implemented | SFT and GRPO artifacts, evaluator, charts |
-| README with links and results | Implemented | README now links Space, notebook, best adapter, evaluator, and charts |
+| Evidence of real training | Implemented | SFT and GRPO artifacts, evaluator, charts, and committed HF Jobs probe metrics |
+| README with links and results | Implemented | README now links Space, notebook, best adapter, evaluator, charts, and the latest probe summary |
 | Mini-blog / short video / slide deck | Draft ready | See `hackathon-mini-blog-draft.md`; publish externally before submission |
 
 ## Verifier Gates Before GRPO

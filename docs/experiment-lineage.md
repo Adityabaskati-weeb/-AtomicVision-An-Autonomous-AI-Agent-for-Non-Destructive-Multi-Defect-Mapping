@@ -10,7 +10,7 @@ were trying to fix, and which one is currently the best base for future work.
 | Best current checkpoint | [prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora) | Promoted | Preserves perfect strict execution and improves the medium held-out slice |
 | Stable fallback | [prodigyhuh/atomicvision-format-submit-merged-lora](https://huggingface.co/prodigyhuh/atomicvision-format-submit-merged-lora) | Preserved | Recovery-safe adapter with reliable two-step tool behavior |
 | Hard-frontier SFT experiment | [prodigyhuh/atomicvision-hard-frontier-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-frontier-boost-lora) | Not promoted | Stayed reliable but did not improve the hard slice |
-| Hard-only GRPO probe | `atomicvision-hard-only-grpo-reference-probe` | In progress | Current method test for improving hard-case quality without breaking execution |
+| Hard-only GRPO probe | `atomicvision-hard-only-grpo-reference-probe` | Completed, not promoted | Produced real reward variance but still failed strict submit behavior |
 
 ## What Each Stage Solved
 
@@ -70,8 +70,14 @@ Goal:
 
 Status:
 
-- active investigation
+- completed on HF Jobs
+- useful for instrumentation and gating
 - not a promoted checkpoint yet
+
+Primary artifacts:
+
+- [hard-only-grpo-reference-probe-results.md](hard-only-grpo-reference-probe-results.md)
+- [hard-only-grpo-reference-probe-metrics.json](hard-only-grpo-reference-probe-metrics.json)
 
 ## Promotion Rule
 
