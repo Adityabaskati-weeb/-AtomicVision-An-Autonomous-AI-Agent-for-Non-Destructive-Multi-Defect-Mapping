@@ -10,6 +10,7 @@ from training.generate_atomicvision_sft_data import (
     build_arg_parser,
     build_cost_aware_sft_examples,
     build_format_refresh_examples,
+    build_hard_recall_micro_repair_examples,
     build_hard_recall_repair_examples,
     build_hard_frontier_boost_examples,
     build_sft_examples,
@@ -196,6 +197,28 @@ def test_hard_recall_repair_examples_focus_on_missing_defect_recovery() -> None:
             assert set(example["prior_prediction"]["predicted_defects"]) == set(
                 _parse_tool_call(example["target_tool_call"])["arguments"]["predicted_defects"]
             )
+
+
+def test_hard_recall_micro_repair_examples_use_narrow_confident_repair_mix() -> None:
+    examples = build_hard_recall_micro_repair_examples(
+        examples_per_difficulty=16,
+        difficulties=("hard",),
+        seed_start=3600,
+    )
+
+    assert len(examples) == 16
+    counts = _counts_by_type(examples)
+    assert counts == {
+        "submit_after_reference": 12,
+        "submit_prior": 4,
+    }
+    assert {example["difficulty"] for example in examples} == {"hard"}
+
+    for example in examples:
+        if example["sample_type"] != "submit_after_reference":
+            continue
+        assert 0.55 <= float(example["prior_confidence"]) <= 0.90
+        assert example["reward_improvement"] >= 0.25
 
 
 def test_format_refresh_examples_are_submit_heavy_and_reference_free() -> None:
@@ -520,6 +543,45 @@ def test_sft_generator_cli_writes_hard_recall_repair_jsonl() -> None:
     assert counts["submit_after_reference"] + counts["submit_prior"] == 16
     assert all(row["difficulty"] == "hard" for row in rows)
     assert "Warning: fewer scan-improvement examples were found than requested" not in completed.stdout
+
+
+def test_sft_generator_cli_writes_hard_recall_micro_repair_jsonl() -> None:
+    output_path = Path(
+        f"outputs/test-sft-generator/atomicvision_hard_recall_micro_{os.getpid()}.jsonl"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "training/generate_atomicvision_sft_data.py",
+            "--profile",
+            "hard_recall_micro_repair",
+            "--episodes-per-difficulty",
+            "16",
+            "--difficulties",
+            "hard",
+            "--seed-start",
+            "3600",
+            "--output-jsonl",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+    assert "Wrote 16 examples" in completed.stdout
+    assert _counts_by_type(rows) == {
+        "submit_after_reference": 12,
+        "submit_prior": 4,
+    }
+    reference_rows = [row for row in rows if row["sample_type"] == "submit_after_reference"]
+    assert reference_rows
+    assert all(0.55 <= float(row["prior_confidence"]) <= 0.90 for row in reference_rows)
+    assert all(float(row["reward_improvement"]) >= 0.25 for row in reference_rows)
 
 
 def _parse_tool_call(text: str) -> dict:
