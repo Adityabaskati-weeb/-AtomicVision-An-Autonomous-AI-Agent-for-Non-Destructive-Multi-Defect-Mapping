@@ -256,6 +256,97 @@ function bucketValues(values, bucketCount) {
   return buckets;
 }
 
+function normalizeNumericSeries(values) {
+  return values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+}
+
+function parseDelimitedSpectrum(text) {
+  const values = [];
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .forEach((line) => {
+      const tokens = line
+        .split(/[,\s\t]+/)
+        .map((token) => Number(token))
+        .filter((token) => Number.isFinite(token));
+      if (!tokens.length) return;
+      values.push(tokens.length >= 2 ? tokens[1] : tokens[0]);
+    });
+  return normalizeNumericSeries(values);
+}
+
+function extractJsonSpectrum(payload) {
+  if (Array.isArray(payload)) {
+    if (payload.every((value) => Number.isFinite(Number(value)))) {
+      return normalizeNumericSeries(payload);
+    }
+    const intensityValues = payload
+      .map((entry) =>
+        entry && typeof entry === "object"
+          ? entry.intensity ?? entry.value ?? entry.y
+          : Number.NaN
+      )
+      .filter((value) => Number.isFinite(Number(value)));
+    return normalizeNumericSeries(intensityValues);
+  }
+
+  if (!payload || typeof payload !== "object") return [];
+
+  if (Array.isArray(payload.intensity)) {
+    return normalizeNumericSeries(payload.intensity);
+  }
+
+  if (payload.spectrum && Array.isArray(payload.spectrum.intensity)) {
+    return normalizeNumericSeries(payload.spectrum.intensity);
+  }
+
+  if (Array.isArray(payload.values)) {
+    return normalizeNumericSeries(payload.values);
+  }
+
+  return [];
+}
+
+async function readUploadedSpectrum(file) {
+  if (!file) return null;
+
+  const text = await file.text();
+  const extension = file.name.toLowerCase().split(".").pop();
+  let values = [];
+
+  if (extension === "json") {
+    values = extractJsonSpectrum(JSON.parse(text));
+  } else {
+    values = parseDelimitedSpectrum(text);
+  }
+
+  return values.length
+    ? {
+        name: file.name,
+        values,
+      }
+    : null;
+}
+
+function resampleSeries(values, targetLength) {
+  if (!values.length || targetLength <= 0) return [];
+  if (values.length === targetLength) return [...values];
+  if (values.length === 1) return Array.from({ length: targetLength }, () => values[0]);
+
+  const lastIndex = values.length - 1;
+  return Array.from({ length: targetLength }, (_, index) => {
+    const position = (index / Math.max(targetLength - 1, 1)) * lastIndex;
+    const lower = Math.floor(position);
+    const upper = Math.min(Math.ceil(position), lastIndex);
+    const blend = position - lower;
+    return values[lower] * (1 - blend) + values[upper] * blend;
+  });
+}
+
 function createHeatmap(values) {
   const heatmap = document.querySelector("#heatmap");
   if (!heatmap) return;
@@ -279,21 +370,26 @@ function createBarGraph(values) {
   if (!graph) return;
 
   graph.innerHTML = "";
+  graph.classList.toggle("is-empty", !values.length);
   if (!values.length) return;
   const maxValue = Math.max(...values, 1e-6);
   const fragment = document.createDocumentFragment();
   values.forEach((value, index) => {
     const node = document.createElement("span");
     const height = 24 + (value / maxValue) * 76;
-    node.style.height = `${height}%`;
+    node.style.setProperty("--bar-height", height.toFixed(2));
+    node.style.height = `${height.toFixed(2)}%`;
     node.style.animationDelay = `${index * 60}ms`;
+    node.setAttribute("aria-hidden", "true");
     fragment.appendChild(node);
   });
   graph.appendChild(fragment);
 }
 
-function computeSignalFidelity(observation) {
-  const current = observation.current_spectrum || [];
+function computeSignalFidelity(observation, overrideSpectrum = null) {
+  const current = overrideSpectrum?.length
+    ? overrideSpectrum
+    : observation.current_spectrum || [];
   const reference = observation.pristine_reference || [];
   if (!current.length) return "--";
   if (!reference.length || reference.length !== current.length) {
@@ -413,68 +509,133 @@ function setupDemo() {
       : 'Analyze Sample <span aria-hidden="true">&rarr;</span>';
   }
 
+  function applyAnalysisResult({
+    observation,
+    prior,
+    differenceSpectrum,
+    latencyMs,
+    fidelityText,
+    resolutionText,
+    summaryText,
+    noteText,
+    statusText,
+  }) {
+    runtimeEpisode.textContent = observation.episode_id || "n/a";
+    runtimeMaterial.textContent = observation.material_id || "n/a";
+    runtimeFamily.textContent = observation.host_family || "n/a";
+    runtimeBudget.textContent =
+      observation.budget_remaining != null
+        ? Number(observation.budget_remaining).toFixed(2)
+        : "n/a";
+    runtimeMessage.textContent = observation.message || "Analysis complete";
+    heroStatus.textContent = statusText;
+
+    fidelityMetric.textContent = fidelityText;
+    latencyMetric.textContent = `${Math.round(latencyMs)} ms`;
+    resolutionMetric.textContent = resolutionText;
+    certaintyMetric.textContent = prior ? prior.confidence.toFixed(2) : "0.00";
+
+    summary.textContent = summaryText;
+    renderDefectRows(prior);
+    createHeatmap(bucketValues(differenceSpectrum, 64));
+    createBarGraph(bucketValues(differenceSpectrum, 12));
+    demoNote.textContent = noteText;
+  }
+
   async function analyzeSample() {
     if (!config.stepUrl) return;
 
     setBusy(true);
-    const uploadName = fileInput?.files?.[0]?.name || "Synthetic OpenEnv sample";
+    const uploadedFile = fileInput?.files?.[0] || null;
+    const uploadedSpectrum = await readUploadedSpectrum(uploadedFile).catch(() => null);
+    const uploadName = uploadedFile?.name || "Synthetic OpenEnv sample";
     demoNote.textContent = `Running ${selectedDifficulty} analysis for ${uploadName}.`;
     heroStatus.textContent = "Live environment processing";
     let socket;
 
     try {
       const started = performance.now();
-      socket = await openDemoSocket(config.wsUrl || "/ws");
+      if (uploadedSpectrum?.values?.length) {
+        const response = await fetch(config.analyzeUploadUrl || "/analyze_upload", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            difficulty: selectedDifficulty,
+            filename: uploadName,
+            spectrum: uploadedSpectrum.values,
+          }),
+        });
 
-      const resetMessage = await sendSocketMessage(socket, {
-        type: "reset",
-        data: { difficulty: selectedDifficulty },
-      });
+        if (!response.ok) {
+          throw new Error("Uploaded spectrum analysis failed.");
+        }
 
-      const priorMessage = await sendSocketMessage(socket, {
-        type: "step",
-        data: { action_type: "ask_prior" },
-      });
+        const payload = await response.json();
+        const finished = performance.now();
+        const observation = payload.observation;
+        const prior = observation.prior_prediction;
+        const predictedDefects = prior?.predicted_defects?.length || 0;
 
-      const referenceMessage = await sendSocketMessage(socket, {
-        type: "step",
-        data: { action_type: "compare_reference" },
-      });
+        applyAnalysisResult({
+          observation,
+          prior,
+          differenceSpectrum: payload.difference_spectrum || [],
+          latencyMs: finished - started,
+          fidelityText: `${Number(payload.metrics?.signal_fidelity ?? 0).toFixed(1)}%`,
+          resolutionText: `${payload.metrics?.input_bins || uploadedSpectrum.values.length} bins`,
+          summaryText: predictedDefects
+            ? `Detected ${predictedDefects} defect candidate${predictedDefects === 1 ? "" : "s"} directly from ${uploadName} after matching against the closest synthetic host reference.`
+            : `No high-confidence defect candidates were surfaced from ${uploadName}. Try a richer spectrum or the built-in OpenEnv scenario for comparison.`,
+          noteText: `Uploaded spectrum drove both backend defect reasoning and the explainability panels (${payload.metrics?.analysis_bins || uploadedSpectrum.values.length} analysis bins).`,
+          statusText: `${selectedDifficulty} upload analyzed`,
+        });
+      } else {
+        socket = await openDemoSocket(config.wsUrl || "/ws");
 
-      const finished = performance.now();
-      const activePayload = referenceMessage.data || priorMessage.data || resetMessage.data;
-      const observation = activePayload.observation;
-      const prior =
-        priorMessage.data?.observation?.prior_prediction || observation.prior_prediction;
+        const resetMessage = await sendSocketMessage(socket, {
+          type: "reset",
+          data: { difficulty: selectedDifficulty },
+        });
 
-      runtimeEpisode.textContent = observation.episode_id || "n/a";
-      runtimeMaterial.textContent = observation.material_id || "n/a";
-      runtimeFamily.textContent = observation.host_family || "n/a";
-      runtimeBudget.textContent = observation.budget_remaining?.toFixed(2) ?? "n/a";
-      runtimeMessage.textContent = observation.message || "Analysis complete";
-      heroStatus.textContent = `${selectedDifficulty} scenario analyzed`;
+        const priorMessage = await sendSocketMessage(socket, {
+          type: "step",
+          data: { action_type: "ask_prior" },
+        });
 
-      fidelityMetric.textContent = computeSignalFidelity(observation);
-      latencyMetric.textContent = `${Math.round(finished - started)} ms`;
-      resolutionMetric.textContent = `${observation.current_spectrum?.length || 0} bins`;
-      certaintyMetric.textContent = prior ? prior.confidence.toFixed(2) : "0.00";
+        const referenceMessage = await sendSocketMessage(socket, {
+          type: "step",
+          data: { action_type: "compare_reference" },
+        });
 
-      const predictedDefects = prior?.predicted_defects?.length || 0;
-      summary.textContent = predictedDefects
-        ? `Detected ${predictedDefects} defect candidate${predictedDefects === 1 ? "" : "s"} for ${observation.material_id} after live prior reasoning and pristine reference comparison.`
-        : `No defect candidates were surfaced on this pass. The environment still completed a live OpenEnv episode.`;
+        const finished = performance.now();
+        const activePayload = referenceMessage.data || priorMessage.data || resetMessage.data;
+        const observation = activePayload.observation;
+        const prior =
+          priorMessage.data?.observation?.prior_prediction || observation.prior_prediction;
+        const predictedDefects = prior?.predicted_defects?.length || 0;
+        const differenceSpectrum =
+          observation.pristine_reference?.length === (observation.current_spectrum || []).length
+            ? (observation.current_spectrum || []).map((value, index) =>
+                Math.abs(value - observation.pristine_reference[index])
+              )
+            : (observation.current_spectrum || []).map((value) => Math.abs(value));
 
-      renderDefectRows(prior);
-
-      const differenceSpectrum =
-        observation.pristine_reference?.length === observation.current_spectrum?.length
-          ? observation.current_spectrum.map((value, index) =>
-              Math.abs(value - observation.pristine_reference[index])
-            )
-          : observation.current_spectrum.map((value) => Math.abs(value));
-
-      createHeatmap(bucketValues(differenceSpectrum, 64));
-      createBarGraph(bucketValues(differenceSpectrum, 12));
+        applyAnalysisResult({
+          observation,
+          prior,
+          differenceSpectrum,
+          latencyMs: finished - started,
+          fidelityText: computeSignalFidelity(observation),
+          resolutionText: `${observation.current_spectrum?.length || 0} bins`,
+          summaryText: predictedDefects
+            ? `Detected ${predictedDefects} defect candidate${predictedDefects === 1 ? "" : "s"} for ${observation.material_id} after live prior reasoning and pristine reference comparison.`
+            : `No defect candidates were surfaced on this pass. The environment still completed a live OpenEnv episode.`,
+          noteText: `Live OpenEnv analysis completed for ${uploadName}. Upload a CSV, TXT, or JSON spectrum to replace the backend reasoning path with direct sample analysis.`,
+          statusText: `${selectedDifficulty} scenario analyzed`,
+        });
+      }
 
       document.querySelector("#results")?.scrollIntoView({
         behavior: "smooth",

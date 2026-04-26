@@ -893,7 +893,9 @@ input {
 
 .heatmap,
 .bar-graph {
+  position: relative;
   min-height: 320px;
+  height: 320px;
   margin-top: 22px;
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -927,12 +929,25 @@ input {
 }
 
 .bar-graph span {
+  display: block;
   flex: 1;
   min-width: 10px;
+  align-self: end;
+  height: calc(var(--bar-height, 0) * 1%);
   border-radius: 999px 999px 4px 4px;
   background: linear-gradient(180deg, var(--silver), var(--graphite));
   box-shadow: 0 0 26px rgba(255, 255, 255, 0.08);
   animation: bar-rise 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.bar-graph.is-empty::after {
+  position: absolute;
+  inset: auto 22px 20px;
+  content: "Spectral relevance will render after analysis.";
+  color: var(--text-muted);
+  font-family: "Sora", sans-serif;
+  font-size: 0.8rem;
+  text-align: center;
 }
 
 .team-section {
