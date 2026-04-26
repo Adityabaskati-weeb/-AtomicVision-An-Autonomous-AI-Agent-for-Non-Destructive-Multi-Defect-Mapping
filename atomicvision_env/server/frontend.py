@@ -168,7 +168,7 @@ def render_home_html() -> str:
                       <span id="file-label">CSV, TXT, or JSON spectral file</span>
                     </label>
                     <button id="analyze-button" class="btn btn-primary analyze-button">Analyze Sample <span aria-hidden="true">&rarr;</span></button>
-                    <p class="demo-note" id="demo-note">Launches a real AtomicVision episode, queries the prior, and reveals a reference comparison.</p>
+                    <p class="demo-note" id="demo-note">Upload a spectrum to drive live backend predictions, or run the built-in OpenEnv episode path with no file attached.</p>
                   </div>
                   <div class="glass-card model-panel" data-reveal>
                     <span class="panel-kicker">Runtime capsule</span>
@@ -255,6 +255,7 @@ def render_home_html() -> str:
                 stepUrl: "/step",
                 stateUrl: "/state",
                 wsUrl: "/ws",
+                analyzeUploadUrl: "/analyze_upload",
               };
             </script>
             <script src="/static/space-ui.js" defer></script>
