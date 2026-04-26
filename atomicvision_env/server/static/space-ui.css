@@ -929,6 +929,7 @@ input {
 }
 
 .bar-graph span {
+  display: block;
   flex: 1;
   min-width: 10px;
   align-self: end;

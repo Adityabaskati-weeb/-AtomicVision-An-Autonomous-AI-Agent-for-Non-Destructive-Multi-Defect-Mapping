@@ -378,7 +378,9 @@ function createBarGraph(values) {
     const node = document.createElement("span");
     const height = 24 + (value / maxValue) * 76;
     node.style.setProperty("--bar-height", height.toFixed(2));
+    node.style.height = `${height.toFixed(2)}%`;
     node.style.animationDelay = `${index * 60}ms`;
+    node.setAttribute("aria-hidden", "true");
     fragment.appendChild(node);
   });
   graph.appendChild(fragment);
