@@ -1,0 +1,38 @@
+{
+  "material_id": "synthetic-medium-0",
+  "host_family": "thermoelectric",
+  "difficulty": "medium",
+  "spectrum": {
+    "unit_x": "thz",
+    "unit_y": "normalized_intensity",
+    "frequency_axis": [
+      0.0,
+      0.1575,
+      0.315,
+      0.4724,
+      0.6299,
+      0.7874,
+      0.9449,
+      1.1024,
+      1.2598,
+      1.4173
+    ],
+    "intensity": [
+      0.210856,
+      0.266276,
+      0.386088,
+      0.404578,
+      0.485513,
+      0.528198,
+      0.664081,
+      0.72622,
+      0.787043,
+      0.747912
+    ]
+  },
+  "metadata": {
+    "source": "atomicvision-demo",
+    "scan_mode": "quick_pdos",
+    "resolution": "low"
+  }
+}
