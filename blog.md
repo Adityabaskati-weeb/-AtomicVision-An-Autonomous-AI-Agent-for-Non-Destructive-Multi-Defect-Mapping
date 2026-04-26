@@ -100,6 +100,24 @@ That is the shape of improvement we wanted:
 - no regression on medium,
 - and no loss of strict execution reliability.
 
+Here is the cleanest view of the final comparison:
+
+![Final model comparison](docs/final-model-comparison.png)
+
+The story is simple: the final adapter does not win by getting flashier or
+looser. It wins by improving the **hard** slice while keeping the rest of the
+system steady.
+
+That became even clearer when we plotted the checkpoint sweep from the targeted
+repair run:
+
+![Checkpoint sweep](docs/final-checkpoint-sweep.png)
+
+This second graph is important because it shows that our final gain did not come
+from "more training" in the generic sense. The improvement appeared early at
+`checkpoint-1`, and longer continuation gave it back. In other words, the
+winning move was **narrow training plus early stopping**, not brute force.
+
 ## Why This Matters
 
 AtomicVision is not a toy grid world and not a static classification prompt. It

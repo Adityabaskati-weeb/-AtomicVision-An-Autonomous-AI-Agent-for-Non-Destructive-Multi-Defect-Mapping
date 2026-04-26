@@ -49,6 +49,16 @@ def test_validator_files_exist() -> None:
     assert Path("docs/hard-error-mining-metrics.json").exists()
     assert Path("docs/hard-recall-micro-repair-results.md").exists()
     assert Path("docs/hard-recall-micro-repair-metrics.json").exists()
+    assert Path("docs/final-model-comparison.png").exists()
+    assert Path("docs/final-checkpoint-sweep.png").exists()
+
+
+def test_blog_surfaces_final_training_story() -> None:
+    blog = Path("blog.md").read_text(encoding="utf-8")
+
+    assert "docs/final-model-comparison.png" in blog
+    assert "docs/final-checkpoint-sweep.png" in blog
+    assert "checkpoint-1" in blog
 
 
 def test_pyproject_exposes_installable_space_package() -> None:
