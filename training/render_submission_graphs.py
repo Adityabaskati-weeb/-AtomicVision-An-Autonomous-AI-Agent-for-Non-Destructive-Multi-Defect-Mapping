@@ -50,18 +50,19 @@ def render_comparison(metrics: dict) -> None:
     f1_prev = [base["medium_f1"], base["hard_f1"]]
     f1_curr = [current["medium_f1"], current["hard_f1"]]
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.6), dpi=180, facecolor=BG)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 6.0), dpi=180, facecolor=BG)
     fig.suptitle(
         "AtomicVision Final Model Comparison",
-        fontsize=22,
+        fontsize=20,
         fontweight="bold",
         color=TEXT,
         x=0.06,
         ha="left",
+        y=0.975,
     )
     fig.text(
         0.06,
-        0.92,
+        0.905,
         "Held-out strict evaluation on 32 medium and 32 hard episodes. Higher is better.",
         fontsize=11.5,
         color=MUTED,
@@ -121,7 +122,7 @@ def render_comparison(metrics: dict) -> None:
         fontsize=10.5,
         color=MUTED,
     )
-    fig.tight_layout(rect=[0.03, 0.06, 1.0, 0.89])
+    fig.tight_layout(rect=[0.03, 0.07, 1.0, 0.83])
     fig.savefig(COMPARISON_OUTPUT, bbox_inches="tight", facecolor=BG)
     plt.close(fig)
 
@@ -135,19 +136,20 @@ def render_sweep(metrics: dict) -> None:
     medium_f1 = [candidates[key]["medium_f1"] for key in order]
     hard_f1 = [candidates[key]["hard_f1"] for key in order]
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.8), dpi=180, facecolor=BG)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 6.2), dpi=180, facecolor=BG)
     fig.suptitle(
         "Checkpoint Sweep: Why Early Stopping Won",
-        fontsize=22,
+        fontsize=19,
         fontweight="bold",
         color=TEXT,
         x=0.06,
         ha="left",
+        y=0.975,
     )
     fig.text(
         0.06,
-        0.92,
-        "The targeted hard-recall continuation only helped at checkpoint-1. Longer training gave the gain back.",
+        0.90,
+        "Targeted hard-recall repair only helped at checkpoint-1; later checkpoints gave the gain back.",
         fontsize=11.5,
         color=MUTED,
     )
@@ -211,7 +213,7 @@ def render_sweep(metrics: dict) -> None:
         fontsize=10.5,
         color=MUTED,
     )
-    fig.tight_layout(rect=[0.03, 0.06, 1.0, 0.89])
+    fig.tight_layout(rect=[0.03, 0.07, 1.0, 0.81])
     fig.savefig(SWEEP_OUTPUT, bbox_inches="tight", facecolor=BG)
     plt.close(fig)
 
