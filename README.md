@@ -54,10 +54,17 @@ accuracy against scan cost.
 - Writeup: [docs/judge-writeup.md](docs/judge-writeup.md)
 - Loss curve image: [docs/training-loss-curve.png](docs/training-loss-curve.png)
 - Reward curve image: [docs/training-reward-curve.png](docs/training-reward-curve.png)
+- Final comparison graph: [docs/final-model-comparison.png](docs/final-model-comparison.png)
+- Checkpoint sweep graph: [docs/final-checkpoint-sweep.png](docs/final-checkpoint-sweep.png)
 
-![Training loss curve](docs/training-loss-curve.png)
+![Final model comparison](docs/final-model-comparison.png)
 
-![Training reward curve](docs/training-reward-curve.png)
+![Checkpoint sweep](docs/final-checkpoint-sweep.png)
+
+The raw training loss and reward traces are still linked above for reproducible
+inspection, but the two charts shown here are the clearer summary of what
+actually mattered in the final submission: the published model improvement and
+the early-stopping checkpoint sweep that produced it.
 
 ## OpenEnv Space Structure
 
