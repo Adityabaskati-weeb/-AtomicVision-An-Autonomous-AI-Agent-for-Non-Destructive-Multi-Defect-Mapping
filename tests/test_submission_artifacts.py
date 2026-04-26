@@ -7,6 +7,7 @@ def test_readme_links_validator_artifacts() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
     assert "https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv" in readme
+    assert "https://colab.research.google.com/github/Adityabaskati-weeb/-AtomicVision-An-Autonomous-AI-Agent-for-Non-Destructive-Multi-Defect-Mapping/blob/main/notebooks/AtomicVision_Judge_Repro_Colab.ipynb" in readme
     assert "notebooks/AtomicVision_Judge_Repro_Colab.ipynb" in readme
     assert "docs/judge-writeup.md" in readme
     assert "docs/training-loss-curve.png" in readme
@@ -16,6 +17,8 @@ def test_readme_links_validator_artifacts() -> None:
     assert "docs/experiment-lineage.md" in readme
     assert "docs/hard-only-grpo-reference-probe-results.md" in readme
     assert "docs/hard-only-grpo-reference-probe-metrics.json" in readme
+    assert "atomicvision-hard-recall-micro-boost-lora" in readme
+    assert "blog.md" in readme
     assert "uv.lock" in readme
     assert "pip install git+https://huggingface.co/spaces/prodigyhuh/atomicvision-openenv" in readme
     assert "uv sync --frozen" in readme

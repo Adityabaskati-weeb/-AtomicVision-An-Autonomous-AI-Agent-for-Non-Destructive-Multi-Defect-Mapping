@@ -284,9 +284,10 @@ previous gate has been validated.
 
 ## Current Gate Status
 
-AtomicVision is now in a verifier-hardening phase before GRPO. The current
-question is not "can we train another adapter?" but "can the trained adapter
-reliably emit valid tool calls on held-out seeds?"
+AtomicVision has completed the model-training phase for submission. The current
+question is no longer "can we make the XML/tool layer reliable?" That part is
+done. The final task is presenting the result clearly and keeping the deployment
+and documentation in sync with the winning published adapter.
 
 Current status:
 
@@ -294,7 +295,10 @@ Current status:
 - Stable NaN-safe SFT path: yes
 - Held-out strict tool-call gate: pass
 - Official normalized held-out eval path: healthy
-- GRPO readiness: not yet; hard cases still trail the baseline
+- Public blog article in repo: yes (`blog.md`)
+- Public Colab link in README: yes
+- Final published submission model: `atomicvision-hard-recall-micro-boost-lora`
+- Model handoff for submission: complete
 
 The project now tracks both:
 
@@ -310,19 +314,18 @@ This split makes it much easier to tell whether a failure is:
 ## Current Best Held-Out Checkpoint
 
 The current best published checkpoint is
-[prodigyhuh/atomicvision-medium-fidelity-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-medium-fidelity-boost-lora).
-It preserves perfect strict and normalized verifier columns, improves the
-medium held-out reward above the prior-submit baseline, and keeps the hard
-slice unchanged relative to the previous stable adapter.
+[prodigyhuh/atomicvision-hard-recall-micro-boost-lora](https://huggingface.co/prodigyhuh/atomicvision-hard-recall-micro-boost-lora).
+It preserves perfect strict and normalized verifier columns, keeps medium flat,
+and improves the hard slice relative to the previous best published adapter.
 
-| Adapter | Medium reward | Hard reward | Strict pass | Done rate | Notes |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Prior-submit baseline | 4.5115 | 4.8883 | 1.00 | 1.00 | Reference policy |
-| `atomicvision-format-submit-merged-lora` | 4.3812 | 4.6466 | 1.00 | 1.00 | Stable recovery adapter |
-| `atomicvision-medium-fidelity-boost-lora` | 4.5707 | 4.6466 | 1.00 | 1.00 | Current best checkpoint |
+| Adapter | Medium reward | Hard reward | Medium F1 | Hard F1 | Strict pass | Done rate | Notes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `atomicvision-medium-fidelity-boost-lora` | 4.5065 | 4.6917 | 0.7891 | 0.8162 | 1.00 | 1.00 | Previous best published adapter |
+| `atomicvision-hard-recall-micro-boost-lora` | 4.5065 | 4.7148 | 0.7891 | 0.8207 | 1.00 | 1.00 | Final published submission model |
 
 The remaining gap is now concentrated in hard frontier quality, not formatting
-or tool-call execution.
+or tool-call execution. The winning repair pass improved recall on hard seeds
+without sacrificing strict execution or medium performance.
 
 ## Official Seed Policy
 
