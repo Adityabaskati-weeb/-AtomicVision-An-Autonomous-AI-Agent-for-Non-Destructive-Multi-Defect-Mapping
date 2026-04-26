@@ -17,7 +17,8 @@ def test_space_root_route_has_browser_landing_page() -> None:
     assert "Autonomous AI for Non-Destructive Multi-Defect Mapping" in response.text
     assert "/static/space-ui.css" in response.text
     assert "/static/space-ui.js" in response.text
-    assert "/static/media/Atoms_Move_Slowly_Around_Circle.mp4" in response.text
+    assert "Static architecture view" in response.text
+    assert "hero-frame" in response.text
     assert "/reset" in response.text
     assert "/step" in response.text
     assert "/ws" in response.text

@@ -68,17 +68,28 @@ def render_home_html() -> str:
                     </div>
 
                     <div class="hero-visual" data-reveal>
-                      <div class="video-frame">
-                        <video
-                          src="/static/media/Atoms_Move_Slowly_Around_Circle.mp4"
-                          muted
-                          playsinline
-                          preload="auto"
-                          aria-label="Atomic orbital transition visualization"
-                        ></video>
-                        <div class="video-gradient"></div>
+                      <div class="hero-frame" aria-label="AtomicVision signal architecture">
+                        <div class="hero-surface"></div>
+                        <div class="hero-grid-overlay"></div>
+                        <div class="hero-orbit hero-orbit-a"></div>
+                        <div class="hero-orbit hero-orbit-b"></div>
+                        <div class="hero-orbit hero-orbit-c"></div>
+                        <div class="hero-core"></div>
+                        <span class="hero-node hero-node-1" aria-hidden="true"></span>
+                        <span class="hero-node hero-node-2" aria-hidden="true"></span>
+                        <span class="hero-node hero-node-3" aria-hidden="true"></span>
+                        <span class="hero-node hero-node-4" aria-hidden="true"></span>
+                        <span class="hero-node hero-node-5" aria-hidden="true"></span>
+                        <div class="hero-signal-card hero-signal-left">
+                          <strong>Signal lattice</strong>
+                          <span>Upload-driven analysis</span>
+                        </div>
+                        <div class="hero-signal-card hero-signal-right">
+                          <strong>Defect engine</strong>
+                          <span>Reference + prior fusion</span>
+                        </div>
                         <div class="video-hud">
-                          <span id="hud-mode">Scroll scrub / live orbit</span>
+                          <span id="hud-mode">Static architecture view</span>
                           <span id="hud-status">OpenEnv ready</span>
                         </div>
                       </div>

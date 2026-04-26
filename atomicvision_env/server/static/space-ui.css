@@ -180,12 +180,11 @@ input {
 
 .hero-scroll {
   position: relative;
-  height: 220vh;
+  min-height: 100svh;
 }
 
 .hero-sticky {
-  position: sticky;
-  top: 0;
+  position: relative;
   display: grid;
   min-height: 100svh;
   align-items: center;
@@ -321,7 +320,7 @@ input {
   gap: 18px;
 }
 
-.video-frame {
+.hero-frame {
   position: relative;
   aspect-ratio: 16 / 11;
   overflow: hidden;
@@ -337,7 +336,7 @@ input {
   transform: translateZ(0);
 }
 
-.video-frame::before {
+.hero-frame::before {
   position: absolute;
   inset: 1px;
   z-index: 3;
@@ -350,21 +349,145 @@ input {
   animation: reflection-sweep 7s ease-in-out infinite;
 }
 
-.video-frame video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: grayscale(1) contrast(1.13) brightness(0.82);
-  transform: scale(1.02);
+.hero-surface,
+.hero-grid-overlay,
+.hero-orbit,
+.hero-core,
+.hero-node,
+.hero-signal-card {
+  position: absolute;
 }
 
-.video-gradient {
-  position: absolute;
+.hero-surface {
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.58), transparent 42%),
-    linear-gradient(0deg, rgba(0, 0, 0, 0.72), transparent 38%);
-  pointer-events: none;
+    radial-gradient(circle at 52% 48%, rgba(255, 255, 255, 0.28), transparent 15%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 42%, rgba(0, 0, 0, 0.18)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 32%);
+}
+
+.hero-grid-overlay {
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black 58%, transparent 100%);
+  opacity: 0.55;
+}
+
+.hero-orbit {
+  top: 50%;
+  left: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  transform-origin: center;
+}
+
+.hero-orbit-a {
+  width: 62%;
+  height: 62%;
+  transform: translate(-50%, -50%) rotate(16deg);
+  animation: orbit-spin-a 24s linear infinite;
+}
+
+.hero-orbit-b {
+  width: 48%;
+  height: 70%;
+  transform: translate(-50%, -50%) rotate(72deg);
+  animation: orbit-spin-b 28s linear infinite;
+}
+
+.hero-orbit-c {
+  width: 74%;
+  height: 42%;
+  transform: translate(-50%, -50%) rotate(-22deg);
+  animation: orbit-spin-c 30s linear infinite;
+}
+
+.hero-core {
+  top: 50%;
+  left: 50%;
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 34% 32%, rgba(255, 255, 255, 0.92), rgba(245, 245, 245, 0.58) 34%, rgba(77, 77, 77, 0.92) 100%);
+  box-shadow:
+    0 0 48px rgba(255, 255, 255, 0.14),
+    inset -10px -10px 18px rgba(0, 0, 0, 0.22);
+  transform: translate(-50%, -50%);
+}
+
+.hero-node {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.92), rgba(201, 201, 201, 0.7) 40%, rgba(77, 77, 77, 0.95));
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.08);
+}
+
+.hero-node-1 {
+  top: 16%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.hero-node-2 {
+  top: 34%;
+  right: 22%;
+}
+
+.hero-node-3 {
+  bottom: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.hero-node-4 {
+  top: 34%;
+  left: 22%;
+}
+
+.hero-node-5 {
+  bottom: 25%;
+  right: 26%;
+}
+
+.hero-signal-card {
+  z-index: 2;
+  display: grid;
+  gap: 4px;
+  min-width: 152px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(16px);
+  font-family: "Sora", sans-serif;
+}
+
+.hero-signal-card strong {
+  font-size: 0.84rem;
+}
+
+.hero-signal-card span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.hero-signal-left {
+  top: 9%;
+  left: 5%;
+}
+
+.hero-signal-right {
+  right: 5%;
+  bottom: 14%;
 }
 
 .video-hud {
@@ -379,6 +502,7 @@ input {
   font-family: "Sora", sans-serif;
   font-size: 0.72rem;
   font-weight: 600;
+  z-index: 2;
 }
 
 .glass-card {
@@ -1034,6 +1158,33 @@ input {
   }
 }
 
+@keyframes orbit-spin-a {
+  from {
+    transform: translate(-50%, -50%) rotate(16deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(376deg);
+  }
+}
+
+@keyframes orbit-spin-b {
+  from {
+    transform: translate(-50%, -50%) rotate(72deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(-288deg);
+  }
+}
+
+@keyframes orbit-spin-c {
+  from {
+    transform: translate(-50%, -50%) rotate(-22deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(338deg);
+  }
+}
+
 @keyframes line-pulse {
   0%,
   100% {
@@ -1095,7 +1246,7 @@ input {
     font-size: clamp(3.1rem, 16vw, 6.4rem);
   }
 
-  .video-frame {
+  .hero-frame {
     aspect-ratio: 16 / 10;
   }
 
@@ -1160,6 +1311,11 @@ input {
   .heatmap,
   .bar-graph {
     min-height: 260px;
+  }
+
+  .hero-signal-card {
+    min-width: 124px;
+    padding: 12px 14px;
   }
 }
 
